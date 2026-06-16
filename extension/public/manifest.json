@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "Ingredient Scanner",
+  "version": "0.2.0",
+  "description": "Analyze product ingredient lists on supported Indian retailers.",
+  "permissions": ["activeTab", "scripting", "storage", "sidePanel", "tabs"],
+  "host_permissions": [
+    "http://localhost:8787/*",
+    "https://*.up.railway.app/*",
+    "https://www.amazon.in/*",
+    "https://amazon.in/*",
+    "https://www.nykaa.com/*",
+    "https://www.myntra.com/*",
+    "https://blinkit.com/*",
+    "https://www.zeptonow.com/*",
+    "https://*.amazonaws.com/*",
+    "https://*.cloudfront.net/*",
+    "https://*.akamaized.net/*",
+    "https://images-na.ssl-images-amazon.com/*",
+    "https://m.media-amazon.com/*"
+  ],
+  "action": {
+    "default_title": "Ingredient Scanner"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.amazon.in/*",
+    "https://amazon.in/*",
+        "https://www.nykaa.com/*",
+        "https://www.myntra.com/*",
+        "https://blinkit.com/*",
+        "https://www.zeptonow.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+# Local Cursor agent skills checkout (optional; regenerate from tooling)
+.agents/
+
+node_modules
+dist
+build
+.env
+.env.*
+!.env.example
+# Local Google service account JSON (never commit)
+cre.json
+*-credentials.json
+*.log
+.DS_Store
+coverage
+*.tsbuildinfo
+.turbo
+drizzle/meta/*.json
+!drizzle/meta/_journal.json

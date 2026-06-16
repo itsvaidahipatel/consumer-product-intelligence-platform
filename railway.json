@@ -1,0 +1,12 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "buildCommand": "corepack enable && corepack prepare pnpm@9.15.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @ingredient-scanner/shared build && pnpm --filter @ingredient-scanner/api build"
+  },
+  "deploy": {
+    "startCommand": "node api/dist/index.js",
+    "healthcheckPath": "/ready",
+    "healthcheckTimeout": 90,
+    "restartPolicyType": "ON_FAILURE"
+  }
+}

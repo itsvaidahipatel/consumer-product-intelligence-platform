@@ -1,0 +1,17 @@
+{
+  "name": "ingredient-scanner-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev:api": "pnpm --filter @ingredient-scanner/api dev",
+    "dev:extension": "pnpm --filter @ingredient-scanner/extension dev",
+    "test": "pnpm -r run test",
+    "lint": "pnpm -r run lint",
+    "db:generate": "pnpm --filter @ingredient-scanner/api db:generate",
+    "db:migrate": "pnpm --filter @ingredient-scanner/api db:migrate"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

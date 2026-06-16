@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy — Ingredient Scanner</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --fg: #111;
+        --muted: #444;
+        --bg: #fff;
+        --border: #ddd;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --fg: #f3f3f3;
+          --muted: #bbb;
+          --bg: #121212;
+          --border: #333;
+        }
+      }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        line-height: 1.55;
+        max-width: 42rem;
+        margin: 0 auto;
+        padding: 1.5rem 1rem 3rem;
+        color: var(--fg);
+        background: var(--bg);
+      }
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 0.25rem;
+      }
+      .meta {
+        font-size: 0.875rem;
+        color: var(--muted);
+        margin-bottom: 1.5rem;
+      }
+      h2 {
+        font-size: 1.1rem;
+        margin-top: 1.75rem;
+        margin-bottom: 0.5rem;
+      }
+      p,
+      ul {
+        margin: 0.5rem 0;
+      }
+      ul {
+        padding-left: 1.25rem;
+      }
+      .box {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        margin: 1rem 0;
+        font-size: 0.9rem;
+      }
+      a {
+        color: #2563eb;
+      }
+      @media (prefers-color-scheme: dark) {
+        a {
+          color: #93c5fd;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Privacy Policy</h1>
+    <p class="meta"><strong>Ingredient Scanner</strong> — Last updated: June 15, 2026</p>
+
+    <p>
+      This extension helps you understand <strong>cosmetic / product ingredient lists</strong> on supported retailer
+      sites by sending limited page-derived data to an <strong>API server you configure</strong> (for example your own
+      backend or a host you trust). This policy describes what the extension itself collects and sends. Your API
+      operator may apply additional practices; review their policy if you use a third-party server.
+    </p>
+
+    <h2>1. Who this applies to</h2>
+    <p>
+      This policy covers the Chrome extension <strong>Ingredient Scanner</strong>. It does not replace the
+      privacy policy of the retailer websites you visit or of the API service you point the extension at.
+    </p>
+
+    <h2>2. Single purpose</h2>
+    <p>
+      The extension has one primary purpose: when you choose to analyze a product page, it extracts ingredient-related
+      information and requests an analysis from your configured API. It does not inject ads, silently modify pages for
+      unrelated purposes, or combine unrelated features.
+    </p>
+
+    <h2>3. Data the extension collects and uses</h2>
+    <p>When you click <strong>Analyze Product</strong> (or equivalent), the extension may collect and use:</p>
+    <ul>
+      <li><strong>Page URL</strong> of the product — to identify the product context and support caching on the server.</li>
+      <li><strong>Site / retailer identifier</strong> — to choose the correct parsing strategy.</li>
+      <li><strong>Product title or name</strong> — as shown on the page.</li>
+      <li><strong>Ingredient-related text</strong> extracted from the visible page (for example from an ingredients section).</li>
+      <li><strong>Image URLs</strong> (and optional dimensions or alt text when available) — so the API can optionally run OCR on product images when you enable that mode.</li>
+      <li><strong>Optional retailer product id</strong> — when the page exposes a stable id.</li>
+      <li><strong>Your settings</strong> stored in Chrome (API base URL, optional API key, analysis preferences).</li>
+    </ul>
+    <p>
+      The extension <strong>does not</strong> read passwords, payment fields, or unrelated form data. It does not run
+      hidden analytics or load executable code from remote servers.
+    </p>
+
+    <h2>4. Where data is sent</h2>
+    <p>
+      Analysis requests are sent with <strong>HTTPS</strong> (or <code>http://</code> only if you deliberately configure a
+      local development URL such as <code>localhost</code>). The request goes only to the <strong>API Base URL</strong> you
+      set in extension options, plus paths allowed by the extension manifest for that host.
+    </p>
+    <div class="box">
+      <strong>Google Cloud Vision (OCR):</strong> The extension does not call Google directly. If your API is configured
+      with Vision credentials, <strong>image-derived text processing</strong> may occur on the server side. That is
+      governed by your API operator and Google’s terms, not by code loaded from the network inside the extension.
+    </div>
+
+    <h2>5. Why data is collected</h2>
+    <ul>
+      <li>To request ingredient parsing, matching, and tiered safety-style summaries from your API.</li>
+      <li>To show results in the side panel and optional on-page banner after you initiate an analysis.</li>
+      <li>To remember your preferences (API URL, keys, toggles) across devices if you use Chrome sync for extension settings.</li>
+    </ul>
+
+    <h2>6. Storage</h2>
+    <ul>
+      <li><strong>chrome.storage.sync</strong> — extension settings (e.g. API URL, optional API key, feature toggles).</li>
+      <li><strong>chrome.storage.local</strong> — short-lived state for the current analysis job and last result so the UI can update.</li>
+    </ul>
+    <p>You can clear extension data from Chrome’s extension details page for this extension.</p>
+
+    <h2>7. Permissions (why they are requested)</h2>
+    <ul>
+      <li><strong>activeTab</strong> — interact with the tab you are analyzing when you take action in the extension.</li>
+      <li><strong>scripting</strong> — run the content script to read public product page content you asked to analyze.</li>
+      <li><strong>storage</strong> — save your settings and temporary analysis state.</li>
+      <li><strong>sidePanel</strong> — show results in Chrome’s side panel.</li>
+      <li><strong>tabs</strong> — resolve the active tab and send messages between the side panel, background worker, and content script for the analysis you started.</li>
+      <li><strong>host_permissions</strong> — limited to supported retailer origins, your API host(s), and image CDN patterns needed to collect image URLs used for analysis (for example Amazon image hosts).</li>
+    </ul>
+
+    <h2>8. Remote code</h2>
+    <p>
+      The extension is built as packaged JavaScript. It does <strong>not</strong> download or execute remote JavaScript,
+      and it does not use <code>eval()</code> on remote content for extension logic. Network calls are used only to
+      POST analysis payloads to your configured API and receive JSON responses.
+    </p>
+
+    <h2>9. Children</h2>
+    <p>The extension is not directed at children under 13.</p>
+
+    <h2>10. Changes</h2>
+    <p>
+      We may update this policy when behavior or permissions change. The “Last updated” date at the top will change
+      accordingly. Material changes should also be reflected in the Chrome Web Store listing when you publish updates.
+    </p>
+
+    <h2>11. Contact</h2>
+    <p>
+      Questions about this policy or the extension:
+      <a href="https://github.com/itsvaidahipatel/ingredient-scanner/issues" rel="noopener noreferrer"
+        >open an issue on GitHub</a
+      >.
+    </p>
+  </body>
+</html>

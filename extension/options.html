@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ingredient Scanner Options</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 24px auto;
+        padding: 0 16px;
+      }
+      label {
+        display: block;
+        margin-top: 12px;
+        font-weight: 600;
+      }
+      input,
+      select {
+        width: 100%;
+        margin-top: 6px;
+        padding: 8px;
+        border-radius: 8px;
+        border: 1px solid #ccc;
+      }
+      .hint {
+        font-size: 12px;
+        color: #555;
+        margin-top: 4px;
+      }
+      button {
+        margin-top: 16px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: 1px solid #2563eb;
+        background: #2563eb;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Ingredient Scanner</h1>
+    <label for="apiBaseUrl">API Base URL</label>
+    <input id="apiBaseUrl" type="url" placeholder="http://localhost:8787" />
+    <div class="hint">Must match a host permission entry in the manifest.</div>
+
+    <label for="apiKey">API Key</label>
+    <input id="apiKey" type="password" autocomplete="off" />
+    <div class="hint">Optional if the API is not enforcing keys.</div>
+
+    <label for="enableAnalysis">Enable ingredient analysis</label>
+    <select id="enableAnalysis">
+      <option value="true">Enabled</option>
+      <option value="false">Disabled</option>
+    </select>
+
+    <label for="maxGalleryImages">Max Gallery Images</label>
+    <input id="maxGalleryImages" type="number" min="0" max="24" />
+    <div class="hint">How many gallery URLs to send (Amazon ranks label/back shots first). Use 12 to match the API Vision cap; increase if the PDP has many thumbnails.</div>
+
+    <label for="analysisMode">Analysis Mode</label>
+    <select id="analysisMode">
+      <option value="DOM_AND_VISION">DOM + Vision (OCR when needed)</option>
+      <option value="DOM_ONLY">DOM Only</option>
+    </select>
+
+    <label for="forceRefresh">Force Refresh Next Analysis</label>
+    <select id="forceRefresh">
+      <option value="false">No</option>
+      <option value="true">Yes</option>
+    </select>
+    <p class="hint" style="margin-top: 4px">
+      You can also use <strong>Fresh run (skip cache)</strong> in the side panel for a one-off refresh without changing this setting.
+    </p>
+
+    <button id="save">Save</button>
+    <div id="msg" class="hint"></div>
+
+    <hr style="margin: 2rem 0 1rem; border: none; border-top: 1px solid #ddd" />
+    <p class="hint" style="margin: 0">
+      <a id="privacyPolicyLink" href="#" target="_blank" rel="noopener noreferrer">Privacy policy</a>
+      — what data is sent to your API and how permissions are used (required disclosure for Chrome Web Store).
+    </p>
+    <script type="module" src="/src/options/options.ts"></script>
+  </body>
+</html>

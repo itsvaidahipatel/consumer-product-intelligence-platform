@@ -1,0 +1,31 @@
+{
+  "name": "@ingredient-scanner/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/run-migrations.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.1",
+    "@google-cloud/vision": "^4.3.2",
+    "@ingredient-scanner/shared": "workspace:*",
+    "drizzle-orm": "^0.38.3",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.0",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "drizzle-kit": "^0.30.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
