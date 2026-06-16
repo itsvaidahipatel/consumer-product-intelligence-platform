@@ -17,6 +17,22 @@ const envSchema = z.object({
   /** Comma-separated API keys accepted from the extension via `x-api-key`. */
   INGREDIENT_SCANNER_API_KEYS: z.string().optional(),
   SERVICE_NAME: z.string().default("ingredient-scanner-api"),
+  OLLAMA_BASE_URL: z.string().optional(),
+  OLLAMA_MODEL_FAST: z.string().optional(),
+  OLLAMA_MODEL_REASONING: z.string().optional(),
+  EMBEDDING_PROVIDER: z.enum(["hash", "ollama"]).optional(),
+  EMBEDDING_MODEL: z.string().optional(),
+  EMBEDDING_DIMS: z.coerce.number().optional(),
+  NEO4J_URI: z.string().optional(),
+  NEO4J_USER: z.string().optional(),
+  NEO4J_PASSWORD: z.string().optional(),
+  LANGFUSE_PUBLIC_KEY: z.string().optional(),
+  LANGFUSE_SECRET_KEY: z.string().optional(),
+  LANGFUSE_BASE_URL: z.string().optional(),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
+  /** `auto` = skip LLM when all ingredients match; `always` = always call Ollama; `off` = deterministic only */
+  LLM_SUMMARY: z.enum(["auto", "always", "off"]).default("auto"),
+  OLLAMA_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

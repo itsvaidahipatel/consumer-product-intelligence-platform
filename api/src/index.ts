@@ -9,6 +9,7 @@ import { createDb } from "./db/client.js";
 import { createVisionFromEnv } from "./services/vision.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerAnalyzeProductRoutes } from "./routes/analyze-product.js";
+import { registerAnalysisRoutes } from "./routes/analysis.js";
 import { SERVICE_VERSION } from "./version.js";
 
 async function main(): Promise<void> {
@@ -35,6 +36,7 @@ async function main(): Promise<void> {
 
   await registerHealthRoutes(app, { db, env });
   await registerAnalyzeProductRoutes(app, { db, env, vision });
+  await registerAnalysisRoutes(app, { db, env });
 
   app.get("/", async () => ({
     service: env.SERVICE_NAME,

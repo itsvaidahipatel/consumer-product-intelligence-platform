@@ -1,4 +1,4 @@
-# Chrome Web Store — compliance notes (Ingredient Scanner)
+# Chrome Web Store — compliance notes (AI Scanner)
 
 Use this alongside **`extension/public/privacy-policy.html`**. For the store’s **Privacy policy** field, use a **public HTTPS URL** to that file after it is on `main`, for example:
 
@@ -30,3 +30,15 @@ Use this alongside **`extension/public/privacy-policy.html`**. For the store’s
 | 20 | Pre-submit checklist | Re-verify rows above; update privacy policy date when behavior changes. |
 
 **Before submission:** load unpacked `extension/dist`, run an end-to-end analyze on each declared `host_permissions` retailer, and confirm the privacy policy URL opens without login.
+
+---
+
+## Store listing copy (AI Scanner)
+
+**Short description:** Analyze product ingredients on supported Indian retailer PDPs with evidence-backed safety insights.
+
+**Full description:** AI Scanner is a Chrome extension that helps you understand what's in the products you shop for online. On supported product pages (Amazon.in, Nykaa, Myntra, Blinkit, Zepto), click **Analyze Product** or open the side panel to extract the ingredient list, match it against an internal encyclopedia, and retrieve cited evidence from our knowledge base. Optional personalization toggles (vegan, allergies, pregnancy, sensitive skin) adjust risk for your profile. Analysis runs against a user-configured API endpoint; no account required for the extension itself.
+
+**Category:** Shopping
+
+**Single purpose:** Ingredient transparency for online product detail pages.

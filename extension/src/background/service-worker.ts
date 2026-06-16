@@ -3,7 +3,7 @@ import { ANALYSIS_JOB_KEY, type AnalysisJobState } from "../panel/analysis-job-s
 
 const ANALYZE_TIMEOUT_MS = 120_000;
 
-const SW_TAG = "[IngredientScanner:SW]";
+const SW_TAG = "[AIScanner:SW]";
 
 function swLog(phase: string, elapsedMs: number, extra?: Record<string, unknown>): void {
   console.info(SW_TAG, {
@@ -177,7 +177,19 @@ async function runAnalyzeJob(msg: AnalyzeMessage): Promise<void> {
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   if (!message || typeof message !== "object") return false;
-  const msg = message as Partial<AnalyzeMessage>;
+  const msg = message as { type?: string; tabId?: number };
+
+  if (msg.type === "AI_SCANNER_OPEN_AND_ANALYZE") {
+    void (async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.windowId != null) {
+        await chrome.sidePanel.open({ windowId: tab.windowId });
+      }
+      sendResponse({ ok: true, opened: true });
+    })();
+    return true;
+  }
+
   if (msg.type !== "INGREDIENT_SCANNER_ANALYZE") return false;
 
   if (typeof msg.tabId !== "number") {

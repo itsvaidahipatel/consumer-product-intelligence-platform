@@ -2,7 +2,7 @@ import type { AnalyzeProductResponse } from "@ingredient-scanner/shared";
 import "./sidepanel.css";
 import { ANALYSIS_JOB_KEY, readAnalysisJob, type AnalysisJobState } from "./analysis-job-storage.js";
 
-const PANEL_TAG = "[IngredientScanner:Panel]";
+const PANEL_TAG = "[AIScanner:Panel]";
 
 function panelLog(phase: string, sinceClickMs: number, extra?: Record<string, unknown>): void {
   const detail = {
@@ -55,6 +55,32 @@ export function mountAnalyzePanel(): void {
     return classification;
   }
 
+  function tierLabel(tier: AnalyzeProductResponse["ingredients"][number]["tier"]): string {
+    switch (tier) {
+      case "BLACK":
+        return "Severe concern";
+      case "RED":
+        return "High concern";
+      case "BLUE":
+        return "Moderate concern";
+      case "GREEN":
+        return "Low concern";
+    }
+  }
+
+  function concernSummary(counts: AnalyzeProductResponse["tierCounts"]): string {
+    const parts: string[] = [];
+    if (counts.BLACK) parts.push(`${counts.BLACK} severe`);
+    if (counts.RED) parts.push(`${counts.RED} high`);
+    if (counts.BLUE) parts.push(`${counts.BLUE} moderate`);
+    if (counts.GREEN) parts.push(`${counts.GREEN} low`);
+    return parts.join(" · ");
+  }
+
+  function cleanSummaryText(text: string): string {
+    return text.replace(/\s*\[[^\]]+\]/g, "").replace(/\s{2,}/g, " ").trim();
+  }
+
   function renderResults(data: AnalyzeProductResponse): void {
     currentAnalysis = data;
     resultsEl.hidden = false;
@@ -69,88 +95,79 @@ export function mountAnalyzePanel(): void {
     };
 
     const tierSectionHtml = (
-      title: string,
       tier: AnalyzeProductResponse["ingredients"][number]["tier"],
     ): string => {
       const items = tierItems(tier);
       if (items.length === 0) return "";
       const rows = items
         .map(({ ing, idx }) => {
-          const note = ing.shortNote ?? "Tap for details.";
-          return `<div class="tier-ingredient" data-ing-index="${idx}">
+          const note = ing.potentialConcerns ?? ing.shortNote ?? ing.description ?? "";
+          const noteHtml = note
+            ? `<div class="tier-ingredient__note">${escapeHtml(note.slice(0, 160))}${note.length > 160 ? "…" : ""}</div>`
+            : "";
+          return `<button type="button" class="tier-ingredient" data-ing-index="${idx}">
           <div class="tier-ingredient__name">${escapeHtml(ing.name)}</div>
-          <div class="tier-ingredient__note">${escapeHtml(note)}</div>
-        </div>`;
+          ${noteHtml}
+        </button>`;
         })
         .join("");
       return `<section class="tier-section tier-section--${tier}">
-        <div class="tier-section__head">${escapeHtml(title)} <span class="tier-section__count">(${items.length})</span></div>
+        <div class="tier-section__head">${escapeHtml(tierLabel(tier))} <span class="tier-section__count">${items.length}</span></div>
         <div class="tier-section__list">${rows}</div>
       </section>`;
     };
 
-    const fullListParagraph =
-      data.ingredients.length === 0
-        ? '<span class="ingredient-paragraph--empty">No ingredients in this result.</span>'
-        : data.ingredients
-            .map(
-              (ing, idx) =>
-                `<span class="ing-link" data-ing-index="${idx}" role="link" tabindex="0">${escapeHtml(ing.name)}</span>`,
-            )
-            .join(", ");
+    const isCached = data.resultSource === "cache";
+    const cacheHint = isCached
+      ? `<p class="cache-hint">Showing a saved result. Use <strong>Re-analyze</strong> below for a fresh check.</p>`
+      : "";
 
-    const sourcePillClass =
-      data.resultSource === "cache" ? "pill pill--meta pill--source-cache" : "pill pill--meta pill--source-fresh";
-    const prov = data.provenance;
-    const provPillClass =
-      prov === "dom"
-        ? "pill pill--meta pill--prov-dom"
-        : prov === "ocr"
-          ? "pill pill--meta pill--prov-ocr"
-          : "pill pill--meta pill--prov-merged";
-    const cacheHint =
-      data.resultSource === "cache"
-        ? `<div class="cache-hint">This is a <strong>saved</strong> analysis from an earlier run. Click <strong>Fresh run (skip cache)</strong> above, or enable <strong>Force refresh</strong> in options, then analyze again.</div>`
+    const personalized =
+      data.personalizedRisk &&
+      data.personalizedRisk !== data.generalRisk &&
+      data.personalizationReasons?.length
+        ? `<div class="personalized-callout">
+        <strong>For you:</strong> ${escapeHtml(data.personalizationReasons[0]!)}
+        ${data.personalizationReasons.length > 1 ? `<span class="personalized-more"> +${data.personalizationReasons.length - 1} more</span>` : ""}
+      </div>`
         : "";
+
+    const summaryText = data.agentReport ? cleanSummaryText(data.agentReport) : "";
+
+    const tierBlocks = (["BLACK", "RED", "BLUE", "GREEN"] as const)
+      .map((t) => tierSectionHtml(t))
+      .join("");
 
     resultsEl.innerHTML = `
     <div class="banner ${bannerClass(data.productClassification)}">
-      <div>${escapeHtml(data.productClassificationLabel)}</div>
+      <div class="banner__title">${escapeHtml(data.productClassificationLabel)}</div>
       <div class="sub">${escapeHtml(data.productClassificationSubtitle)}</div>
+      <div class="banner__stats">${escapeHtml(concernSummary(counts))}</div>
     </div>
-    <div class="summary-card">
-      <div class="summary-card__title">Analysis summary</div>
-      <div class="stat-strip">
-        <div class="stat"><span class="stat__value">${data.totalIngredients}</span><span class="stat__label">Total</span></div>
-        <div class="stat stat--black"><span class="stat__value">${counts.BLACK}</span><span class="stat__label">Black</span></div>
-        <div class="stat stat--red"><span class="stat__value">${counts.RED}</span><span class="stat__label">Red</span></div>
-        <div class="stat stat--blue"><span class="stat__value">${counts.BLUE}</span><span class="stat__label">Blue</span></div>
-        <div class="stat stat--green"><span class="stat__value">${counts.GREEN}</span><span class="stat__label">Green</span></div>
+    ${personalized}
+    ${summaryText ? `<section class="insight-card"><p class="insight-card__text">${escapeHtml(summaryText)}</p></section>` : ""}
+    ${cacheHint}
+    ${tierBlocks}
+    <div class="feedback-block">
+      <span class="feedback-label">Was this helpful?</span>
+      <div class="feedback-row">
+        <button type="button" class="secondary feedback-btn" data-vote="helpful">Yes</button>
+        <button type="button" class="secondary feedback-btn" data-vote="not_helpful">No</button>
       </div>
     </div>
-    <div class="meta-row">
-      <div class="${sourcePillClass}">Source: ${escapeHtml(data.resultSource)}</div>
-      <div class="${provPillClass}">Provenance: ${escapeHtml(data.provenance)}</div>
-    </div>
-    ${cacheHint}
-    <section class="full-list-card">
-      <div class="full-list-card__label">Complete ingredient list</div>
-      <p class="ingredient-paragraph">${fullListParagraph}</p>
-    </section>
-    ${tierSectionHtml("Black ingredients", "BLACK")}
-    ${tierSectionHtml("Red ingredients", "RED")}
-    ${tierSectionHtml("Blue ingredients", "BLUE")}
-    ${tierSectionHtml("Green ingredients", "GREEN")}
-    <div class="future-tabs">
-      Coming later: Safety analysis, regulatory info, scientific sources, similar and alternative products.
-    </div>
   `;
+
+    resultsEl.querySelectorAll(".feedback-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        void submitFeedback(data, (btn as HTMLButtonElement).dataset.vote ?? "helpful");
+      });
+    });
 
     if (data.warnings?.length) {
       const w = document.createElement("div");
       w.className = "result-warning";
       w.textContent = data.warnings.join(" ");
-      resultsEl.appendChild(w);
+      resultsEl.insertBefore(w, resultsEl.querySelector(".feedback-block"));
     }
   }
 
@@ -167,29 +184,46 @@ export function mountAnalyzePanel(): void {
     });
   }
 
+  async function submitFeedback(data: AnalyzeProductResponse, vote: string): Promise<void> {
+    if (!data.analysisId) {
+      setStatus("Cannot send feedback — no analysis ID.");
+      return;
+    }
+    const settings = await chrome.storage.sync.get(["apiBaseUrl", "apiKey"]);
+    const apiBaseUrl = String(settings.apiBaseUrl ?? "http://localhost:8787").replace(/\/$/, "");
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (settings.apiKey) headers["x-api-key"] = String(settings.apiKey);
+    try {
+      const res = await fetch(`${apiBaseUrl}/feedback`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ analysisId: data.analysisId, vote, labels: [] }),
+      });
+      setStatus(res.ok ? "Thanks for your feedback." : `Feedback failed (${res.status}).`);
+    } catch {
+      setStatus("Feedback failed — is the API running?");
+    }
+  }
+
   function openDetail(ing: AnalyzeProductResponse["ingredients"][number]): void {
     const modal = document.createElement("div");
     modal.className = "modal open";
-    const reg = ing.regulatoryStatus
-      ? Object.entries(ing.regulatoryStatus)
-          .map(([k, v]) => `${escapeHtml(k.toUpperCase())}: ${escapeHtml(String(v))}`)
-          .join("<br/>")
-      : "Not available";
+    const concern = ing.potentialConcerns ?? ing.shortNote ?? "";
+    const evidenceLinks = (ing.evidenceRefs ?? [])
+      .filter((e) => e.url)
+      .slice(0, 3)
+      .map(
+        (e) =>
+          `<a href="${escapeHtml(e.url!)}" target="_blank" rel="noopener">${escapeHtml(e.title ?? "Source")}</a>`,
+      )
+      .join(" · ");
     modal.innerHTML = `
     <div class="modal-card">
       <h3>${escapeHtml(ing.name)}</h3>
-      <div class="label">Tier</div>
-      <p>${escapeHtml(ing.tier)}</p>
-      <div class="label">Function</div>
-      <p>${escapeHtml(ing.function ?? "—")}</p>
-      <div class="label">Description</div>
-      <p>${escapeHtml(ing.description ?? "—")}</p>
-      <div class="label">Potential concerns</div>
-      <p>${escapeHtml(ing.potentialConcerns ?? ing.shortNote ?? "—")}</p>
-      <div class="label">Regulatory status</div>
-      <p>${reg}</p>
-      <div class="label">Sources</div>
-      <p>${escapeHtml((ing.sources ?? []).join(", ") || "—")}</p>
+      <p class="modal-tier">${escapeHtml(tierLabel(ing.tier))}</p>
+      ${ing.description ? `<p class="modal-body">${escapeHtml(ing.description)}</p>` : ""}
+      ${concern ? `<div class="modal-label">Note</div><p class="modal-body">${escapeHtml(concern)}</p>` : ""}
+      ${evidenceLinks ? `<div class="modal-label">Sources</div><p class="modal-links">${evidenceLinks}</p>` : ""}
       <button id="close-modal" type="button" class="primary">Close</button>
     </div>
   `;
@@ -224,7 +258,7 @@ export function mountAnalyzePanel(): void {
     }
     if (job.phase === "done") {
       setAnalyzeButtonsDisabled(false);
-      setStatus(`Done (${job.data.resultSource})`);
+      setStatus("Analysis complete");
       renderResults(job.data);
     }
   }
@@ -311,9 +345,7 @@ export function mountAnalyzePanel(): void {
     setAnalyzeButtonsDisabled(true);
     resultsEl.hidden = true;
     setStatus(
-      opts.forceRefresh
-        ? "Reading page… (fresh run — server cache will be skipped)"
-        : "Reading page…",
+      opts.forceRefresh ? "Reading page…" : "Reading page…",
     );
     panelLog("analyze_click", performance.now() - clickT0, { force_refresh: opts.forceRefresh });
 
@@ -345,6 +377,7 @@ export function mountAnalyzePanel(): void {
       "maxGalleryImages",
       "analysisMode",
       "forceRefresh",
+      "userPreferences",
     ]);
     const enableAnalysis =
       typeof settings.enableAnalysis === "boolean"
@@ -374,6 +407,7 @@ export function mountAnalyzePanel(): void {
         analysisMode: settings.analysisMode === "DOM_ONLY" ? "DOM_ONLY" : "DOM_AND_VISION",
         forceRefresh: opts.forceRefresh ? true : Boolean(settings.forceRefresh),
         imageUrls: (extract.payload.imageUrls as string[]).slice(0, maxImages),
+        userPreferences: settings.userPreferences as Record<string, boolean> | undefined,
       },
       apiBaseUrl,
       apiKey: settings.apiKey ? String(settings.apiKey) : "",
@@ -414,7 +448,7 @@ export function mountAnalyzePanel(): void {
 
     setStatus("Analyzing… (you can switch tabs — results appear here when ready.)");
     panelLog("panel_waiting_for_storage_job", performance.now() - clickT0, {
-      note: "API work runs in service worker; watch [IngredientScanner:SW] logs",
+      note: "API work runs in service worker; watch [AIScanner:SW] logs",
     });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

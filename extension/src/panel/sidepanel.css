@@ -1,16 +1,17 @@
-/* Side panel — light theme only, modern neutral UI */
+/* Side panel — Consumer Product Intelligence theme (teal + slate) */
 :root {
   color-scheme: only light;
-  --bg: #f1f5f9;
+  --bg: #f4f7f6;
   --surface: #ffffff;
-  --text: #0f172a;
-  --text-muted: #64748b;
+  --text: #0c1222;
+  --text-muted: #5c6678;
   --border: #e2e8f0;
   --border-strong: #cbd5e1;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-soft: #eff6ff;
-  --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
+  --accent: #0d9488;
+  --accent-hover: #0f766e;
+  --accent-soft: #f0fdfa;
+  --accent-muted: #ccfbf1;
+  --shadow: 0 1px 3px rgba(12, 18, 34, 0.06), 0 8px 24px rgba(12, 18, 34, 0.06);
   --radius: 12px;
   --radius-sm: 8px;
   --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -52,8 +53,9 @@ body {
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-muted);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-muted);
+  border-left: 3px solid var(--accent);
   border-radius: var(--radius-sm);
 }
 
@@ -88,9 +90,9 @@ body {
 }
 
 .primary {
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent) 0%, #0891b2 100%);
   color: #fff;
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.28);
 }
 
 .primary:hover:not(:disabled) {
@@ -160,6 +162,121 @@ body {
   font-weight: 500;
   font-size: 13px;
   opacity: 0.92;
+}
+
+.banner__title {
+  font-size: 15px;
+}
+
+.banner__stats {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.linkish {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.linkish:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.insight-card {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.insight-card__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.personalized-callout {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: var(--radius-sm);
+  color: #9a3412;
+}
+
+.personalized-more {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.feedback-block {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.feedback-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.feedback-row {
+  display: flex;
+  gap: 8px;
+}
+
+.feedback-row .secondary {
+  flex: 1;
+  width: auto;
+}
+
+.modal-tier {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.modal-body {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.modal-label {
+  margin: 12px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.modal-links {
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+
+.modal-links a {
+  color: var(--accent);
 }
 
 .banner.YELLOW {
@@ -282,16 +399,16 @@ body {
   background: linear-gradient(135deg, #c2410c, #9a3412);
 }
 .pill--source-fresh {
-  background: linear-gradient(135deg, #16a34a, #15803d);
+  background: linear-gradient(135deg, #0d9488, #0f766e);
 }
 .pill--prov-dom {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: linear-gradient(135deg, #14b8a6, #0d9488);
 }
 .pill--prov-ocr {
-  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
 }
 .pill--prov-merged {
-  background: linear-gradient(135deg, #0d9488, #0f766e);
+  background: linear-gradient(135deg, #0891b2, #0e7490);
 }
 
 .cache-hint {
@@ -337,7 +454,7 @@ body {
   font-weight: 500;
   cursor: pointer;
   text-decoration: underline;
-  text-decoration-color: rgba(37, 99, 235, 0.35);
+  text-decoration-color: rgba(13, 148, 136, 0.35);
   text-underline-offset: 2px;
 }
 
@@ -404,8 +521,14 @@ body {
 }
 
 .tier-ingredient {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
   padding: 10px 14px;
+  border: none;
   border-bottom: 1px solid #f1f5f9;
+  background: transparent;
   cursor: pointer;
   transition: background 0.12s ease;
 }

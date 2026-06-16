@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Ingredient Scanner",
+  "name": "AI Scanner",
   "version": "0.2.0",
-  "description": "Analyze product ingredient lists on supported Indian retailers.",
+  "description": "AI-powered product ingredient analysis on supported e-commerce sites.",
   "permissions": ["activeTab", "scripting", "storage", "sidePanel", "tabs"],
   "host_permissions": [
     "http://localhost:8787/*",
@@ -20,7 +20,7 @@
     "https://m.media-amazon.com/*"
   ],
   "action": {
-    "default_title": "Ingredient Scanner"
+    "default_title": "AI Scanner"
   },
   "side_panel": {
     "default_path": "sidepanel.html"

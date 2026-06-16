@@ -7,6 +7,7 @@ import {
   productAnalyses,
 } from "../db/schema.js";
 import type { IngredientTier } from "@ingredient-scanner/shared";
+import { expandIngredientLookupKeys } from "@ingredient-scanner/shared";
 
 export type MatchedIngredient = {
   rawToken: string;
@@ -16,6 +17,7 @@ export type MatchedIngredient = {
   description?: string;
   function?: string;
   canonicalId: string | null;
+  dataSource?: string | null;
   regulatory: Record<string, "allowed" | "restricted" | "banned">;
 };
 
@@ -42,15 +44,26 @@ export async function matchIngredientTokens(
   const normalizedTokens = tokens.map((t) => t.trim().toLowerCase()).filter(Boolean);
   const uniqueNorms = [...new Set(normalizedTokens)];
 
+  const lookupKeysByToken = new Map<string, string[]>();
+  const allLookupKeys = new Set<string>();
+  for (const token of uniqueNorms) {
+    const keys = expandIngredientLookupKeys(token);
+    lookupKeysByToken.set(token, keys);
+    for (const key of keys) allLookupKeys.add(key);
+  }
+  const lookupKeyList = [...allLookupKeys];
+
   const canonicalByNorm = new Map<string, CanonicalRow>();
-  if (uniqueNorms.length > 0) {
+
+  if (lookupKeyList.length > 0) {
     const t0 = performance.now();
     const directRows = await db
       .select()
       .from(canonicalIngredients)
-      .where(inArray(canonicalIngredients.normalizedName, uniqueNorms));
+      .where(inArray(canonicalIngredients.normalizedName, lookupKeyList));
     trackPhase?.("ingredient_match_direct", performance.now() - t0, {
       unique_token_count: uniqueNorms.length,
+      lookup_key_count: lookupKeyList.length,
       canonical_rows: directRows.length,
     });
     for (const row of directRows) {
@@ -58,7 +71,7 @@ export async function matchIngredientTokens(
     }
   }
 
-  const needSynonym = uniqueNorms.filter((n) => !canonicalByNorm.has(n));
+  const needSynonym = lookupKeyList.filter((n) => !canonicalByNorm.has(n));
   const synonymCanonByNorm = new Map<string, CanonicalRow>();
   if (needSynonym.length > 0) {
     const t1 = performance.now();
@@ -84,9 +97,18 @@ export async function matchIngredientTokens(
     }
   }
 
+  const resolveRowForToken = (token: string): CanonicalRow | undefined => {
+    const keys = lookupKeysByToken.get(token) ?? [token];
+    for (const key of keys) {
+      const row = canonicalByNorm.get(key) ?? synonymCanonByNorm.get(key);
+      if (row) return row;
+    }
+    return undefined;
+  };
+
   const resolvedIds = new Set<string>();
   for (const n of uniqueNorms) {
-    const row = canonicalByNorm.get(n) ?? synonymCanonByNorm.get(n);
+    const row = resolveRowForToken(n);
     if (row) resolvedIds.add(row.id);
   }
 
@@ -120,7 +142,7 @@ export async function matchIngredientTokens(
     const normalized = rawToken.trim().toLowerCase();
     if (!normalized) continue;
 
-    const row = canonicalByNorm.get(normalized) ?? synonymCanonByNorm.get(normalized);
+    const row = resolveRowForToken(normalized);
     if (!row) {
       results.push({
         rawToken,
@@ -143,6 +165,7 @@ export async function matchIngredientTokens(
       description: row.description ?? undefined,
       function: row.functionDescription ?? undefined,
       canonicalId: row.id,
+      dataSource: row.dataSource,
       regulatory: { ...regulatoryByIngredientId.get(row.id) },
     });
   }

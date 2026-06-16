@@ -1,5 +1,6 @@
 import type { AnalyzeProductResponse } from "@ingredient-scanner/shared";
 import { showAnalysisBanner } from "./banner.js";
+import { injectPdpAnalyzeButton } from "./pdp-button.js";
 import { resolveStrategy } from "./strategies/index.js";
 
 declare global {
@@ -13,6 +14,10 @@ if (window.__INGREDIENT_SCANNER_CS_BOOTSTRAPPED__) {
   // Module may re-run on programmatic injection; listener already registered.
 } else {
   window.__INGREDIENT_SCANNER_CS_BOOTSTRAPPED__ = true;
+
+  if (resolveStrategy(window.location.href)) {
+    injectPdpAnalyzeButton();
+  }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "INGREDIENT_SCANNER_EXTRACT") {

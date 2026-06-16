@@ -181,6 +181,13 @@ export const productAnalyses = pgTable(
       winningReasonCode?: string;
       tierCounts?: { GREEN: number; BLUE: number; RED: number; BLACK: number };
     }>(),
+    /** Structured product understanding snapshot (DOM + OCR sources). */
+    productUnderstandingJson: jsonb("product_understanding_json").$type<{
+      product_name?: string;
+      category?: string;
+      ingredients?: string[];
+      sources?: { dom?: string; ocr?: string };
+    }>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -219,3 +226,69 @@ export const productAnalysisIngredients = pgTable("product_analysis_ingredients"
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Thumbs / flags on a persisted product analysis (eval + continuous improvement). */
+export const analysisFeedback = pgTable(
+  "analysis_feedback",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    analysisId: uuid("analysis_id")
+      .notNull()
+      .references(() => productAnalyses.id, { onDelete: "cascade" }),
+    vote: text("vote").notNull(),
+    labels: jsonb("labels").$type<string[]>().notNull(),
+    comment: text("comment"),
+    clientHints: jsonb("client_hints").$type<Record<string, unknown> | null>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    analysisFeedbackAnalysisIdx: index("analysis_feedback_analysis_id_idx").on(t.analysisId),
+  }),
+);
+
+/** Per-run cost and latency telemetry. */
+export const analysisRuns = pgTable(
+  "analysis_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    analysisId: uuid("analysis_id").references(() => productAnalyses.id, { onDelete: "set null" }),
+    correlationId: text("correlation_id").notNull(),
+    wallMs: integer("wall_ms").notNull(),
+    visionUnits: integer("vision_units").notNull().default(0),
+    embeddingCalls: integer("embedding_calls").notNull().default(0),
+    llmInputTokens: integer("llm_input_tokens").notNull().default(0),
+    llmOutputTokens: integer("llm_output_tokens").notNull().default(0),
+    modelId: text("model_id"),
+    estimatedCostUsd: real("estimated_cost_usd"),
+    pipelineVersion: text("pipeline_version").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    analysisRunsCorrelationIdx: index("analysis_runs_correlation_id_idx").on(t.correlationId),
+    analysisRunsAnalysisIdx: index("analysis_runs_analysis_id_idx").on(t.analysisId),
+  }),
+);
+
+/** Persisted Vision OCR artifacts keyed by image URL hash. */
+export const ocrRuns = pgTable(
+  "ocr_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    analysisId: uuid("analysis_id").references(() => productAnalyses.id, { onDelete: "cascade" }),
+    imageUrlHash: text("image_url_hash").notNull(),
+    imageUrl: text("image_url").notNull(),
+    rawAnnotationJson: jsonb("raw_annotation_json"),
+    parsedText: text("parsed_text"),
+    meanConfidence: real("mean_confidence"),
+    boundingBoxesJson: jsonb("bounding_boxes_json"),
+    visionModelVersion: text("vision_model_version").notNull().default("vision-v1"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    ocrCacheUq: uniqueIndex("ocr_runs_image_url_hash_vision_model_version_key").on(
+      t.imageUrlHash,
+      t.visionModelVersion,
+    ),
+    ocrRunsAnalysisIdx: index("ocr_runs_analysis_id_idx").on(t.analysisId),
+  }),
+);

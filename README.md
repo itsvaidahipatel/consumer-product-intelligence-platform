@@ -68,7 +68,18 @@ Supabase URLs (`*.supabase.co`) use **`ssl: "require"`** automatically on the Po
 
 Analyze:
 
-- `POST http://localhost:8787/analyze/product`
+- `POST http://localhost:8787/analyze` — same body as below (preferred name for the platform spec).
+- `POST http://localhost:8787/analyze/product` — same handler (legacy path).
+- `GET http://localhost:8787/analysis/<uuid>` — returns the persisted analysis (`resultSource: "stored"`, `correlationId` from the original run). Use `analysisId` from a prior `POST /analyze` response.
+- `POST http://localhost:8787/feedback` — JSON body: `{ "analysisId": "<uuid>", "vote": "helpful"|"not_helpful"|"incorrect"|"flag", "labels": [], "comment"?: "...", "clientHints"?: {} }`. Requires the same `x-api-key` as analyze when `INGREDIENT_SCANNER_API_KEYS` is set.
+
+After pointing `DATABASE_URL` at a **new** Supabase (or other Postgres) project, run migrations from the repo root:
+
+```bash
+pnpm db:migrate
+```
+
+That applies `0000_init.sql` through `0003_analysis_feedback.sql` (including the `analysis_feedback` table).
 
 ### 3) Extension
 
@@ -98,8 +109,8 @@ Reload the extension in `chrome://extensions` after each rebuild.
 ### Analyze timing logs (debugging hangs)
 
 - **API terminal:** Each run emits structured `pipeline_phase` logs (message `pipeline:<phase>`) with `duration_ms`, `phase`, and `correlation_id`. Slow work usually appears under `vision_fetch_images`, `vision_ocr_batch`, `ingredient_match_*`, or `cache_lookup_db`.
-- **Extension service worker:** `chrome://extensions` → your extension → **Service worker** → **Inspect** → filter the console for `[IngredientScanner:SW]` (includes `fetch_duration_ms`, HTTP status, and `correlation_id` after JSON parse).
-- **Side panel:** Right‑click the side panel → **Inspect** → filter `[IngredientScanner:Panel]` for page extract and background handoff timings.
+- **Extension service worker:** `chrome://extensions` → your extension → **Service worker** → **Inspect** → filter the console for `[AIScanner:SW]` (includes `fetch_duration_ms`, HTTP status, and `correlation_id` after JSON parse).
+- **Side panel:** Right‑click the side panel → **Inspect** → filter `[AIScanner:Panel]` for page extract and background handoff timings.
 - Match **`correlation_id`** from the SW log `response_json_parsed` with the same field in API logs for one request.
 
 ## Environment variables

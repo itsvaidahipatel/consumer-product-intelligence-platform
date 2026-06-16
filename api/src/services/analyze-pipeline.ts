@@ -10,6 +10,7 @@ import {
   type AnalyzeProductRequest,
   type AnalyzeProductResponse,
 } from "@ingredient-scanner/shared";
+import { encyclopediaEvidenceRefs, countEvidenceRefs } from "../lib/evidence.js";
 import { asc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import {
@@ -29,6 +30,10 @@ import {
   selectDomOnlyForVisionGate,
   selectWinningIngredientCandidate,
 } from "./scored-candidate-selection.js";
+import { classifyProductCategory } from "./product-category.js";
+import { findCachedOcrRun, persistOcrRun } from "./ocr-persist.js";
+import type { RichDocumentOcrResult } from "./vision.js";
+import type { PhaseTimingCollector } from "../lib/phase-timing.js";
 
 const CACHE_MIN_CONFIDENCE = 0.72;
 const MAX_VISION_IMAGES = 12;
@@ -64,15 +69,14 @@ function shouldRunVision(args: {
   mode: "DOM_ONLY" | "DOM_AND_VISION";
   raw: string;
   completenessFlag: boolean;
-  forceRefresh: boolean;
   hasImages: boolean;
 }): boolean {
   if (args.mode === "DOM_ONLY") return false;
   if (!args.hasImages) return false;
-  if (args.forceRefresh) return true;
+  // Skip OCR when the retailer DOM already has a complete ingredient list.
+  if (args.completenessFlag && args.raw.trim()) return false;
   if (!args.raw.trim()) return true;
-  if (!args.completenessFlag) return true;
-  return false;
+  return !args.completenessFlag;
 }
 
 function provenanceForSource(source: "dom" | "ocr" | "merged"): "retailer_page" | "product_images" | "both" {
@@ -86,6 +90,27 @@ function shortWarning(tier: IngredientTier, description?: string): string | unde
   if (tier === "RED") return "Higher concern or common irritant/allergen.";
   if (tier === "BLUE") return description ?? "Generally acceptable; note for sensitive users.";
   return description ?? "Low concern in typical use.";
+}
+
+function classificationToGeneralRisk(
+  c: ProductClassification,
+): "LOW" | "MEDIUM" | "HIGH" | "SEVERE" {
+  if (c === "GREEN") return "LOW";
+  if (c === "BLUE" || c === "YELLOW") return "MEDIUM";
+  if (c === "RED") return "HIGH";
+  return "SEVERE";
+}
+
+function withRiskMeta(
+  base: AnalyzeProductResponse,
+  ingredients: IngredientResult[],
+): AnalyzeProductResponse {
+  return {
+    ...base,
+    ingredients,
+    evidenceCount: countEvidenceRefs(ingredients),
+    generalRisk: classificationToGeneralRisk(base.productClassification),
+  };
 }
 
 function toIngredientResults(
@@ -103,16 +128,26 @@ function toIngredientResults(
     shortNote: shortWarning(m.tier, m.description),
     potentialConcerns: m.tier === "RED" || m.tier === "BLACK" ? m.description : undefined,
     sources: m.canonicalId ? ["Internal Encyclopedia"] : undefined,
+    evidenceRefs: m.canonicalId
+      ? encyclopediaEvidenceRefs({
+          canonicalId: m.canonicalId,
+          displayName: m.displayName,
+          description: m.description,
+          dataSource: m.dataSource,
+        })
+      : undefined,
   }));
 }
 
-async function loadCachedResponse(
+/** Rebuild the public analyze payload from a persisted `product_analyses` row (cache hit, GET by id, etc.). */
+export async function buildStoredAnalysisResponse(
   db: Db,
   analysisId: string,
-  correlationId: string,
+  responseCorrelationId: string,
   log: PipelineLog,
   logBase: Record<string, unknown>,
-): Promise<AnalyzeProductResponse> {
+  opts: { resultSource: "cache" | "stored"; cacheReason?: string },
+): Promise<AnalyzeProductResponse | null> {
   let t = nowMs();
   const rows = await db
     .select({
@@ -143,7 +178,7 @@ async function loadCachedResponse(
 
   const meta = analysis[0];
   if (!meta) {
-    throw new Error("Missing analysis row");
+    return null;
   }
 
   const regulatoryByIngredientId = new Map<
@@ -191,6 +226,14 @@ async function loadCachedResponse(
       potentialConcerns:
         tier === "RED" || tier === "BLACK" ? (ci?.description ?? undefined) : undefined,
       sources: pai.normalizedIngredientId ? ["Internal Encyclopedia"] : undefined,
+      evidenceRefs: pai.normalizedIngredientId
+        ? encyclopediaEvidenceRefs({
+            canonicalId: pai.normalizedIngredientId,
+            displayName: display,
+            description: ci?.description ?? undefined,
+            dataSource: ci?.dataSource,
+          })
+        : undefined,
     };
   });
 
@@ -215,40 +258,48 @@ async function loadCachedResponse(
         }
       : classifyProduct(completenessFlag, tiers);
 
-  return {
-    correlationId,
-    resultSource: "cache",
-    cacheReason: "valid_complete_analysis",
-    completenessFlag,
-    analysisStatus: completenessFlag ? "COMPLETE" : "INCOMPLETE",
-    productClassification: banner.classification,
-    productClassificationLabel: banner.label,
-    productClassificationSubtitle: banner.subtitle,
-    provenance: meta.provenance as AnalyzeProductResponse["provenance"],
-    winningReasonCode: summary?.winningReasonCode ?? "cache",
-    confidenceScore: meta.confidenceScore ?? 0,
+  return withRiskMeta(
+    {
+      correlationId: responseCorrelationId,
+      analysisId,
+      resultSource: opts.resultSource,
+      cacheReason: opts.cacheReason,
+      completenessFlag,
+      analysisStatus: completenessFlag ? "COMPLETE" : "INCOMPLETE",
+      productClassification: banner.classification,
+      productClassificationLabel: banner.label,
+      productClassificationSubtitle: banner.subtitle,
+      provenance: meta.provenance as AnalyzeProductResponse["provenance"],
+      winningReasonCode: summary?.winningReasonCode ?? "cache",
+      confidenceScore: meta.confidenceScore ?? 0,
+      ingredients,
+      tierCounts,
+      totalIngredients: ingredients.length,
+      warnings: completenessFlag
+        ? undefined
+        : [
+            "The ingredient list appears incomplete. Results may be inaccurate. Try another retailer, OCR, or refresh.",
+          ],
+    },
     ingredients,
-    tierCounts,
-    totalIngredients: ingredients.length,
-    warnings: completenessFlag
-      ? undefined
-      : [
-          "The ingredient list appears incomplete. Results may be inaccurate. Try another retailer, OCR, or refresh.",
-        ],
-  };
+  );
 }
 
-export async function runAnalyzeProductPipeline(args: {
+export async function runLegacyAnalyzeProductPipeline(args: {
   db: Db;
   req: AnalyzeProductRequest;
   vision: VisionClient | null;
   correlationId: string;
   log: PipelineLog;
+  timingCollector?: PhaseTimingCollector;
 }): Promise<AnalyzeProductResponse> {
-  const { db, req, vision, correlationId, log } = args;
+  const { db, req, vision, correlationId, log, timingCollector } = args;
   const pipelineT0 = nowMs();
+  const requestStartedAt = timingCollector?.requestStartedAt ?? Date.now();
   const logBase: Record<string, unknown> = {
     correlation_id: correlationId,
+    request_started_at: requestStartedAt,
+    timing_collector: timingCollector,
     ...requestLogContext(req),
   };
 
@@ -278,7 +329,13 @@ export async function runAnalyzeProductPipeline(args: {
     });
 
     if (cached) {
-      const out = await loadCachedResponse(db, cached.id, correlationId, log, logBase);
+      const out = await buildStoredAnalysisResponse(db, cached.id, correlationId, log, logBase, {
+        resultSource: "cache",
+        cacheReason: "valid_complete_analysis",
+      });
+      if (!out) {
+        throw new Error("cache_corrupt_missing_analysis");
+      }
       logPipelinePhase(log, logBase, "pipeline_total", nowMs() - pipelineT0, {
         result_source: "cache",
         total_ingredients: out.totalIngredients,
@@ -309,12 +366,16 @@ export async function runAnalyzeProductPipeline(args: {
   let ocrText: string | undefined;
   let ocrMeanConfidence: number | undefined;
   let ocrChunkList: string[] | undefined;
+  const pendingOcrPersists: {
+    imageUrl: string;
+    imageUrlHash: string;
+    result: RichDocumentOcrResult;
+  }[] = [];
 
   const wantsVision = shouldRunVision({
     mode: req.analysisMode,
     raw: (domGatePick.winningRawText || sanitizedDom).trim(),
     completenessFlag: domCompleteness.completenessFlag,
-    forceRefresh: Boolean(req.forceRefresh),
     hasImages: rankedVisionUrls.length > 0,
   });
 
@@ -344,13 +405,45 @@ export async function runAnalyzeProductPipeline(args: {
     const VISION_CONCURRENCY = 3;
     for (let i = 0; i < buffers.length; i += VISION_CONCURRENCY) {
       const slice = buffers.slice(i, i + VISION_CONCURRENCY);
+      const urlSlice = rankedVisionUrls.slice(i, i + VISION_CONCURRENCY);
       const tBatch = nowMs();
       const part = await Promise.all(
-        slice.map((buf) =>
-          buf.length >= 80
-            ? vision.documentTextFromBuffer(buf)
-            : Promise.resolve({ text: "", confidence: 0 }),
-        ),
+        slice.map(async (buf, j) => {
+          const url = urlSlice[j] ?? "";
+          const imageUrlHash = sha256Hex(url);
+          if (!req.forceRefresh && url) {
+            const cached = await findCachedOcrRun(db, imageUrlHash);
+            if (cached) {
+              return {
+                text: cached.parsedText,
+                confidence: cached.meanConfidence ?? 0.65,
+                boundingBoxes: cached.boundingBoxes,
+                rawAnnotation: undefined,
+                fromCache: true as const,
+                imageUrl: url,
+                imageUrlHash,
+              };
+            }
+          }
+          if (buf.length < 80) {
+            return {
+              text: "",
+              confidence: 0,
+              boundingBoxes: [],
+              rawAnnotation: undefined,
+              fromCache: false as const,
+              imageUrl: url,
+              imageUrlHash,
+            };
+          }
+          const rich = await vision.documentTextRichFromBuffer(buf);
+          return {
+            ...rich,
+            fromCache: false as const,
+            imageUrl: url,
+            imageUrlHash,
+          };
+        }),
       );
       logPipelinePhase(log, logBase, "vision_ocr_batch", nowMs() - tBatch, {
         batch_start_index: i,
@@ -361,6 +454,18 @@ export async function runAnalyzeProductPipeline(args: {
         const idx = i + j;
         if (ocr.text) ocrChunks[idx] = ocr.text;
         confidences[idx] = ocr.confidence;
+        if (!ocr.fromCache && ocr.text && ocr.imageUrl) {
+          pendingOcrPersists.push({
+            imageUrl: ocr.imageUrl,
+            imageUrlHash: ocr.imageUrlHash,
+            result: {
+              text: ocr.text,
+              confidence: ocr.confidence,
+              boundingBoxes: ocr.boundingBoxes,
+              rawAnnotation: ocr.rawAnnotation,
+            },
+          });
+        }
       });
     }
     const ocrTextJoined = ocrChunks.filter(Boolean).join("\n");
@@ -436,6 +541,7 @@ export async function runAnalyzeProductPipeline(args: {
   const analyzedAt = new Date();
 
   let tTx = nowMs();
+  let persistedAnalysisId = "";
   await db.transaction(async (tx) => {
     await tx
       .insert(retailers)
@@ -467,16 +573,25 @@ export async function runAnalyzeProductPipeline(args: {
           winningReasonCode: pick.winningReasonCode,
           tierCounts,
         },
+        productUnderstandingJson: {
+          product_name: req.productName,
+          category: classifyProductCategory(req.productName, req.siteId),
+          ingredients: pick.tokens,
+          sources: {
+            dom: sanitizedDom || undefined,
+            ocr: ocrText || undefined,
+          },
+        },
       })
       .returning({ id: productAnalyses.id });
 
-    const analysisId = inserted?.id;
-    if (!analysisId) throw new Error("Failed to persist analysis");
+    persistedAnalysisId = inserted?.id ?? "";
+    if (!persistedAnalysisId) throw new Error("Failed to persist analysis");
 
     if (matched.length > 0) {
       await tx.insert(productAnalysisIngredients).values(
         matched.map((m, orderIndex) => ({
-          analysisId,
+          analysisId: persistedAnalysisId,
           rawToken: m.rawToken,
           normalizedIngredientId: m.canonicalId,
           tierUsed: m.tier,
@@ -490,31 +605,52 @@ export async function runAnalyzeProductPipeline(args: {
   });
   logPipelinePhase(log, logBase, "persist_analysis_transaction", nowMs() - tTx, {
     ingredient_row_count: matched.length,
+    analysis_id: persistedAnalysisId,
   });
+
+  if (pendingOcrPersists.length > 0 && persistedAnalysisId) {
+    await Promise.all(
+      pendingOcrPersists.map((p) =>
+        persistOcrRun(db, {
+          analysisId: persistedAnalysisId,
+          imageUrl: p.imageUrl,
+          imageUrlHash: p.imageUrlHash,
+          parsedText: p.result.text,
+          meanConfidence: p.result.confidence,
+          boundingBoxes: p.result.boundingBoxes,
+          rawAnnotation: p.result.rawAnnotation,
+        }),
+      ),
+    );
+  }
 
   logPipelinePhase(log, logBase, "pipeline_total", nowMs() - pipelineT0, {
     result_source: "fresh_pipeline",
     total_ingredients: ingredientRows.length,
   });
 
-  return {
-    correlationId,
-    resultSource: "fresh_pipeline",
-    completenessFlag: finalCompleteness.completenessFlag,
-    analysisStatus: finalCompleteness.completenessFlag ? "COMPLETE" : "INCOMPLETE",
-    productClassification: banner.classification,
-    productClassificationLabel: banner.label,
-    productClassificationSubtitle: banner.subtitle,
-    provenance: pick.source,
-    winningReasonCode: pick.winningReasonCode,
-    confidenceScore,
-    ingredients: ingredientRows,
-    tierCounts,
-    totalIngredients: ingredientRows.length,
-    warnings: finalCompleteness.completenessFlag
-      ? undefined
-      : [
-          "The ingredient list appears incomplete. Results may be inaccurate. Try another retailer, OCR, or refresh.",
-        ],
-  };
+  return withRiskMeta(
+    {
+      correlationId,
+      analysisId: persistedAnalysisId,
+      resultSource: "fresh_pipeline",
+      completenessFlag: finalCompleteness.completenessFlag,
+      analysisStatus: finalCompleteness.completenessFlag ? "COMPLETE" : "INCOMPLETE",
+      productClassification: banner.classification,
+      productClassificationLabel: banner.label,
+      productClassificationSubtitle: banner.subtitle,
+      provenance: pick.source,
+      winningReasonCode: pick.winningReasonCode,
+      confidenceScore,
+      ingredients: ingredientRows,
+      tierCounts,
+      totalIngredients: ingredientRows.length,
+      warnings: finalCompleteness.completenessFlag
+        ? undefined
+        : [
+            "The ingredient list appears incomplete. Results may be inaccurate. Try another retailer, OCR, or refresh.",
+          ],
+    },
+    ingredientRows,
+  );
 }

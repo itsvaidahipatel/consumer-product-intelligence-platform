@@ -1,11 +1,12 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { AnalyzeProductRequestSchema } from "@ingredient-scanner/shared";
 import { randomUUID } from "node:crypto";
 import type { Db } from "../db/client.js";
 import type { Env } from "../env.js";
 import type { VisionClient } from "../services/vision.js";
-import { runAnalyzeProductPipeline } from "../services/analyze-pipeline.js";
+import { runAnalyzeProductPipeline } from "../services/analyze-orchestrator.js";
 import { SERVICE_VERSION } from "../version.js";
+import { ensureApiKeyAuthorized, parseApiKeys } from "../lib/api-key-guard.js";
 
 type AnalysisErrorBody = {
   error: "analysis_failed";
@@ -66,12 +67,84 @@ function analysisFailureResponse(err: unknown): {
   return { status: 500, body: { error: "analysis_failed", message: raw, details: raw } };
 }
 
-function parseApiKeys(raw?: string): string[] {
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+async function handleAnalyzeProductPost(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  deps: { db: Db; env: Env; vision: VisionClient | null },
+  keys: string[],
+  routeLabel: string,
+): Promise<void> {
+  if (!ensureApiKeyAuthorized(req, reply, keys)) return;
+
+  const parsed = AnalyzeProductRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    void reply.code(400).send({ error: "invalid_request", details: parsed.error.flatten() });
+    return;
+  }
+
+  const correlationId = randomUUID();
+  const started = Date.now();
+  const pipelineLog = req.log.child({
+    correlation_id: correlationId,
+    route: routeLabel,
+  });
+
+  pipelineLog.info(
+    {
+      event: "analyze_product_request_accepted",
+      timestamp: new Date().toISOString(),
+      site_id: parsed.data.siteId,
+      image_url_count: parsed.data.imageUrls.length,
+      analysis_mode: parsed.data.analysisMode,
+      force_refresh: Boolean(parsed.data.forceRefresh),
+      raw_text_chars: parsed.data.rawIngredientText.length,
+    },
+    "analyze_product_request",
+  );
+
+  try {
+    const result = await runAnalyzeProductPipeline({
+      db: deps.db,
+      env: deps.env,
+      req: parsed.data,
+      vision: deps.vision,
+      correlationId,
+      log: pipelineLog,
+    });
+
+    const outcome = result.resultSource === "cache" ? "cache_hit" : "success";
+
+    req.log.info({
+      correlation_id: correlationId,
+      timestamp: new Date().toISOString(),
+      outcome,
+      duration_ms: Date.now() - started,
+      total_ingredients: result.totalIngredients,
+      result_source: result.resultSource,
+      analysis_id: result.analysisId,
+      timing_phases: result.timing?.phases.length,
+      service: deps.env.SERVICE_NAME,
+      version: SERVICE_VERSION,
+    });
+
+    void reply.send(result);
+  } catch (err) {
+    req.log.error(
+      {
+        correlation_id: correlationId,
+        outcome: "failure",
+        failure_stage: "analyze_product_pipeline",
+        duration_ms: Date.now() - started,
+        service: deps.env.SERVICE_NAME,
+        version: SERVICE_VERSION,
+        err,
+      },
+      "analyze_product_failed",
+    );
+
+    const { status, body } = analysisFailureResponse(err);
+    void reply.code(status).send(body);
+  }
 }
 
 export async function registerAnalyzeProductRoutes(
@@ -80,75 +153,11 @@ export async function registerAnalyzeProductRoutes(
 ): Promise<void> {
   const keys = parseApiKeys(deps.env.INGREDIENT_SCANNER_API_KEYS);
 
-  app.post("/analyze/product", async (req, reply) => {
-    if (keys.length > 0) {
-      const header = req.headers["x-api-key"];
-      const provided = typeof header === "string" ? header : Array.isArray(header) ? header[0] : "";
-      if (!provided || !keys.includes(provided)) {
-        return reply.code(401).send({ error: "unauthorized" });
-      }
-    }
+  app.post("/analyze/product", (req, reply) =>
+    handleAnalyzeProductPost(req, reply, deps, keys, "POST /analyze/product"),
+  );
 
-    const parsed = AnalyzeProductRequestSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return reply.code(400).send({ error: "invalid_request", details: parsed.error.flatten() });
-    }
-
-    const correlationId = randomUUID();
-    const started = Date.now();
-    const pipelineLog = req.log.child({
-      correlation_id: correlationId,
-      route: "POST /analyze/product",
-    });
-
-    pipelineLog.info(
-      {
-        event: "analyze_product_request_accepted",
-        site_id: parsed.data.siteId,
-        image_url_count: parsed.data.imageUrls.length,
-        analysis_mode: parsed.data.analysisMode,
-        force_refresh: Boolean(parsed.data.forceRefresh),
-        raw_text_chars: parsed.data.rawIngredientText.length,
-      },
-      "analyze_product_request",
-    );
-
-    try {
-      const result = await runAnalyzeProductPipeline({
-        db: deps.db,
-        req: parsed.data,
-        vision: deps.vision,
-        correlationId,
-        log: pipelineLog,
-      });
-
-      req.log.info({
-        correlation_id: correlationId,
-        outcome: result.resultSource === "cache" ? "cache_hit" : "success",
-        duration_ms: Date.now() - started,
-        total_ingredients: result.totalIngredients,
-        result_source: result.resultSource,
-        service: deps.env.SERVICE_NAME,
-        version: SERVICE_VERSION,
-      });
-
-      return reply.send(result);
-    } catch (err) {
-      req.log.error(
-        {
-          correlation_id: correlationId,
-          outcome: "failure",
-          failure_stage: "analyze_product_pipeline",
-          duration_ms: Date.now() - started,
-          service: deps.env.SERVICE_NAME,
-          version: SERVICE_VERSION,
-          err,
-        },
-        "analyze_product_failed",
-      );
-
-      const { status, body } = analysisFailureResponse(err);
-      return reply.code(status).send(body);
-    }
-  });
+  app.post("/analyze", (req, reply) =>
+    handleAnalyzeProductPost(req, reply, deps, keys, "POST /analyze"),
+  );
 }

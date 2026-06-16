@@ -22,16 +22,16 @@ export function showAnalysisBanner(data: AnalyzeProductResponse): void {
         width: 280px;
         border-radius: 12px;
         padding: 10px 12px;
-        color: #0b1220;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-        border: 1px solid rgba(0,0,0,0.08);
+        color: #0c1222;
+        box-shadow: 0 10px 30px rgba(13, 148, 136, 0.18);
+        border: 1px solid rgba(13, 148, 136, 0.2);
         background: #fff;
       }
-      .title { font-weight: 800; font-size: 13px; }
-      .sub { font-size: 12px; margin-top: 4px; opacity: 0.85; }
+      .title { font-weight: 800; font-size: 13px; color: #0f766e; }
+      .sub { font-size: 12px; margin-top: 4px; opacity: 0.85; color: #5c6678; }
       .counts { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 6px; margin-top: 8px; font-size: 12px; }
-      .pill { background: #f3f4f6; border-radius: 999px; padding: 4px 8px; text-align: center; }
-      button { margin-top: 8px; width: 100%; border: 0; border-radius: 10px; padding: 8px; cursor: pointer; font-weight: 700; background: #111827; color: #fff; }
+      .pill { background: #f0fdfa; border-radius: 999px; padding: 4px 8px; text-align: center; color: #0f766e; border: 1px solid #ccfbf1; }
+      button { margin-top: 8px; width: 100%; border: 0; border-radius: 10px; padding: 8px; cursor: pointer; font-weight: 700; background: linear-gradient(135deg, #0d9488, #0891b2); color: #fff; }
     </style>
     <div class="card">
       <div class="title">${escape(data.productClassificationLabel)}</div>

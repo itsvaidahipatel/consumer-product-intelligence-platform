@@ -8,7 +8,27 @@ export function normalizeIngredientToken(raw: string): string {
   s = s.replace(/[()[\]{}]/g, " ");
   s = s.replace(/[,;]+/g, " ");
   s = s.replace(/\s+/g, " ").trim();
+  s = s.replace(/\.+$/, "").trim();
   return s;
+}
+
+/**
+ * Lookup keys for encyclopedia matching.
+ * Handles INCI slash aliases (`aqua / water`) without splitting polymer slashes (`VA/CROTONATES/…`).
+ */
+export function expandIngredientLookupKeys(raw: string): string[] {
+  const keys = new Set<string>();
+  const push = (value: string) => {
+    const norm = normalizeIngredientToken(value);
+    if (norm) keys.add(norm);
+  };
+
+  push(raw);
+  const spaced = raw.trim().toLowerCase().replace(/\.+$/, "").trim();
+  for (const part of spaced.split(/\s+\/\s+/)) {
+    push(part);
+  }
+  return [...keys];
 }
 
 /**

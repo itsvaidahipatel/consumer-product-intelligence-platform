@@ -9,7 +9,14 @@
     "test": "pnpm -r run test",
     "lint": "pnpm -r run lint",
     "db:generate": "pnpm --filter @ingredient-scanner/api db:generate",
-    "db:migrate": "pnpm --filter @ingredient-scanner/api db:migrate"
+    "db:migrate": "pnpm --filter @ingredient-scanner/api db:migrate",
+    "rag:seed": "pnpm --filter @ingredient-scanner/api rag:seed",
+    "graph:sync": "pnpm --filter @ingredient-scanner/api graph:sync",
+    "eval:run": "pnpm --filter @ingredient-scanner/shared build && tsx eval/run.ts"
+  },
+  "devDependencies": {
+    "@ingredient-scanner/shared": "workspace:*",
+    "tsx": "^4.19.2"
   },
   "engines": {
     "node": ">=20"

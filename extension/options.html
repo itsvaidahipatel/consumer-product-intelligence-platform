@@ -3,13 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ingredient Scanner Options</title>
+    <title>AI Scanner Options</title>
     <style>
+      :root {
+        --accent: #0d9488;
+        --accent-hover: #0f766e;
+        --text: #0c1222;
+        --muted: #5c6678;
+        --surface: #ffffff;
+        --border: rgba(13, 148, 136, 0.15);
+      }
       body {
-        font-family: system-ui, sans-serif;
+        font-family: system-ui, -apple-system, sans-serif;
         max-width: 720px;
         margin: 24px auto;
         padding: 0 16px;
+        color: var(--text);
+        background: #f4f7f6;
+      }
+      h1 {
+        color: var(--accent-hover);
+        letter-spacing: -0.02em;
       }
       label {
         display: block;
@@ -20,29 +34,42 @@
       select {
         width: 100%;
         margin-top: 6px;
-        padding: 8px;
+        padding: 8px 10px;
         border-radius: 8px;
-        border: 1px solid #ccc;
+        border: 1px solid #cbd5e1;
+        background: var(--surface);
+      }
+      input:focus,
+      select:focus {
+        outline: 2px solid var(--accent-muted, #ccfbf1);
+        border-color: var(--accent);
       }
       .hint {
         font-size: 12px;
-        color: #555;
+        color: var(--muted);
         margin-top: 4px;
       }
       button {
         margin-top: 16px;
-        padding: 10px 14px;
+        padding: 10px 16px;
         border-radius: 8px;
-        border: 1px solid #2563eb;
-        background: #2563eb;
+        border: none;
+        background: linear-gradient(135deg, var(--accent), #0891b2);
         color: #fff;
         font-weight: 600;
         cursor: pointer;
+        box-shadow: 0 2px 8px rgba(13, 148, 136, 0.25);
+      }
+      button:hover {
+        background: linear-gradient(135deg, var(--accent-hover), var(--accent));
+      }
+      a {
+        color: var(--accent);
       }
     </style>
   </head>
   <body>
-    <h1>Ingredient Scanner</h1>
+    <h1>AI Scanner</h1>
     <label for="apiBaseUrl">API Base URL</label>
     <input id="apiBaseUrl" type="url" placeholder="http://localhost:8787" />
     <div class="hint">Must match a host permission entry in the manifest.</div>
@@ -75,6 +102,15 @@
     <p class="hint" style="margin-top: 4px">
       You can also use <strong>Fresh run (skip cache)</strong> in the side panel for a one-off refresh without changing this setting.
     </p>
+
+    <h2 style="margin-top: 1.5rem; font-size: 1.1rem">Personalization</h2>
+    <label><input type="checkbox" id="prefVegan" /> Vegan</label>
+    <label><input type="checkbox" id="prefVegetarian" /> Vegetarian</label>
+    <label><input type="checkbox" id="prefPregnancy" /> Pregnancy</label>
+    <label><input type="checkbox" id="prefNutAllergy" /> Nut allergy</label>
+    <label><input type="checkbox" id="prefDairyAllergy" /> Dairy allergy</label>
+    <label><input type="checkbox" id="prefSensitiveSkin" /> Sensitive skin</label>
+    <label><input type="checkbox" id="prefFragranceSensitivity" /> Fragrance sensitivity</label>
 
     <button id="save">Save</button>
     <div id="msg" class="hint"></div>

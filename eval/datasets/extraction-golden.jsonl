@@ -1,0 +1,2 @@
+{"id":"hairspray-1","text":"alcohol denat., dimethyl ether, aqua / water, linalool, parfum / fragrance","expect":["alcohol denat","dimethyl ether","aqua","water","linalool","parfum","fragrance"]}
+{"id":"simple-1","text":"Water, Glycerin, Niacinamide, Phenoxyethanol","expect":["water","glycerin","niacinamide","phenoxyethanol"]}

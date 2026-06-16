@@ -3,17 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Ingredient Scanner</title>
+    <title>AI Scanner</title>
   </head>
   <body>
     <main class="shell">
       <p class="panel-hint">
-        Stays open while you switch tabs. On a product page (e.g. Amazon.in), tap <strong>Analyze Product</strong>
-        — first run with OCR can take ~1 minute. <strong>Fresh run (skip cache)</strong> bypasses the server cache.
+        Open a supported product page, then tap <strong>Analyze Product</strong>.
       </p>
       <div class="button-row">
         <button id="analyze" type="button" class="primary">Analyze Product</button>
-        <button id="analyze-fresh" type="button" class="secondary">Fresh run (skip cache)</button>
+        <button id="analyze-fresh" type="button" class="linkish">Re-analyze (skip cache)</button>
       </div>
       <div id="status" class="status" hidden></div>
       <div id="results" class="results" hidden></div>

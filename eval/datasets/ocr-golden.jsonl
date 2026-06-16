@@ -1,0 +1,2 @@
+{"id":"ocr-label-1","image_fixture":"fixtures/label-hairspray.txt","expect_tokens":["alcohol denat","aqua","parfum"]}
+{"id":"ocr-label-2","image_fixture":"fixtures/label-simple.txt","expect_tokens":["water","glycerin","niacinamide"]}
