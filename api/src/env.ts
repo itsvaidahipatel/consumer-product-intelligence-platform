@@ -37,8 +37,17 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+/** Railway/dashboard pastes often include trailing newlines — breaks DNS bind (HOST) and DB URLs. */
+function trimProcessEnv(env: NodeJS.ProcessEnv): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(env)) {
+    out[key] = typeof value === "string" ? value.trim() : value;
+  }
+  return out;
+}
+
 export function loadEnv(): Env {
-  const parsed = envSchema.safeParse(process.env);
+  const parsed = envSchema.safeParse(trimProcessEnv(process.env));
   if (!parsed.success) {
     const hint =
       process.env.DATABASE_URL === undefined
@@ -58,6 +67,8 @@ export function loadEnv(): Env {
 
   return {
     ...data,
+    HOST: data.HOST.trim() || "0.0.0.0",
+    DATABASE_URL: data.DATABASE_URL.trim(),
     GOOGLE_VISION_CREDENTIALS_JSON: visionJson || undefined,
   };
 }

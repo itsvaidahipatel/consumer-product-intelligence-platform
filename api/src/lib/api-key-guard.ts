@@ -18,7 +18,10 @@ export function ensureApiKeyAuthorized(
   const header = req.headers["x-api-key"];
   const provided = typeof header === "string" ? header : Array.isArray(header) ? header[0] : "";
   if (!provided || !keys.includes(provided)) {
-    void reply.code(401).send({ error: "unauthorized" });
+    void reply.code(401).send({
+      error: "unauthorized",
+      hint: "Send x-api-key matching INGREDIENT_SCANNER_API_KEYS (extension Options → API key).",
+    });
     return false;
   }
   return true;

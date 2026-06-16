@@ -216,6 +216,53 @@ export async function runAnalyzeProductPipeline(args: AnalyzePipelineArgs): Prom
 
   const legacy = await runLegacyAnalyzeProductPipeline({ ...args, timingCollector: timing });
 
+  if (legacy.resultSource === "cache") {
+    const tCache = performance.now();
+    let response = applyPersonalization(legacy, args.req.userPreferences);
+    const report = buildDeterministicReport(response);
+    response = { ...response, agentReport: report };
+
+    logPipelinePhase(args.log, logBase, "cache_fast_path", performance.now() - tCache, {
+      skipped_rag: true,
+      skipped_llm: true,
+    });
+
+    const timingSummary = finalizeTiming(timing);
+    try {
+      await args.db.insert(analysisRuns).values({
+        analysisId: response.analysisId ?? null,
+        correlationId: args.correlationId,
+        wallMs: timingSummary.totalMs,
+        visionUnits: 0,
+        embeddingCalls: 0,
+        llmInputTokens: 0,
+        llmOutputTokens: 0,
+        modelId: "cache",
+        pipelineVersion: PIPELINE_VERSION,
+      });
+    } catch {
+      /* telemetry table may not exist yet */
+    }
+
+    endSpan(args.correlationId, "agent_coordinator");
+    await traceLangfuseEvent({
+      correlationId: args.correlationId,
+      name: "analyze_complete",
+      metadata: { wall_ms: timingSummary.totalMs, cache_fast_path: true },
+    });
+
+    args.log.info({
+      ...omitInternalLogFields(logBase),
+      event: "analyze_timing_summary",
+      timestamp: timingSummary.completedAt,
+      total_ms: timingSummary.totalMs,
+      cache_fast_path: true,
+      phases: timingSummary.phases,
+    });
+
+    return response;
+  }
+
   let response = await enrichWithRagAndGraph(args.db, args.env, legacy, args.log, logBase);
 
   const needsOcr = response.provenance !== "dom";

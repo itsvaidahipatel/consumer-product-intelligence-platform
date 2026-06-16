@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Scanner",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "AI-powered product ingredient analysis on supported e-commerce sites.",
   "permissions": ["activeTab", "scripting", "storage", "sidePanel", "tabs"],
   "host_permissions": [

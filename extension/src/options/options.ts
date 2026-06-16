@@ -1,3 +1,5 @@
+import { DEFAULT_API_BASE_URL } from "../config.js";
+
 const fields = {
   apiBaseUrl: document.querySelector<HTMLInputElement>("#apiBaseUrl")!,
   apiKey: document.querySelector<HTMLInputElement>("#apiKey")!,
@@ -31,7 +33,7 @@ async function load(): Promise<void> {
     "userPreferences",
   ]);
 
-  fields.apiBaseUrl.value = String(s.apiBaseUrl ?? "http://localhost:8787");
+  fields.apiBaseUrl.value = String(s.apiBaseUrl ?? DEFAULT_API_BASE_URL);
   fields.apiKey.value = String(s.apiKey ?? "");
   const enableAnalysis =
     typeof s.enableAnalysis === "boolean" ? s.enableAnalysis : s.enableQuickie !== false;

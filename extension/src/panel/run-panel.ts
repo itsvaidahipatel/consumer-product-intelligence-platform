@@ -1,6 +1,7 @@
 import type { AnalyzeProductResponse } from "@ingredient-scanner/shared";
 import "./sidepanel.css";
 import { ANALYSIS_JOB_KEY, readAnalysisJob, type AnalysisJobState } from "./analysis-job-storage.js";
+import { DEFAULT_API_BASE_URL } from "../config.js";
 
 const PANEL_TAG = "[AIScanner:Panel]";
 
@@ -190,7 +191,7 @@ export function mountAnalyzePanel(): void {
       return;
     }
     const settings = await chrome.storage.sync.get(["apiBaseUrl", "apiKey"]);
-    const apiBaseUrl = String(settings.apiBaseUrl ?? "http://localhost:8787").replace(/\/$/, "");
+    const apiBaseUrl = String(settings.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (settings.apiKey) headers["x-api-key"] = String(settings.apiKey);
     try {
@@ -390,7 +391,7 @@ export function mountAnalyzePanel(): void {
       return;
     }
 
-    const apiBaseUrl = String(settings.apiBaseUrl ?? "http://localhost:8787").replace(/\/$/, "");
+    const apiBaseUrl = String(settings.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
     const maxImages = Number(settings.maxGalleryImages ?? 12);
 
     await chrome.storage.local.set({

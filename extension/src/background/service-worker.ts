@@ -1,5 +1,6 @@
 import type { AnalyzeProductRequest, AnalyzeProductResponse } from "@ingredient-scanner/shared";
 import { ANALYSIS_JOB_KEY, type AnalysisJobState } from "../panel/analysis-job-storage.js";
+import { DEFAULT_API_BASE_URL, LEGACY_LOCAL_API_URL } from "../config.js";
 
 const ANALYZE_TIMEOUT_MS = 120_000;
 
@@ -24,9 +25,20 @@ type AnalyzeMessage = {
 
 chrome.runtime.onInstalled.addListener(() => {
   void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+  void chrome.storage.sync.get("apiBaseUrl").then(({ apiBaseUrl }) => {
+    if (!apiBaseUrl || apiBaseUrl === LEGACY_LOCAL_API_URL) {
+      return chrome.storage.sync.set({ apiBaseUrl: DEFAULT_API_BASE_URL });
+    }
+  });
 });
 
 void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
+
+void chrome.storage.sync.get("apiBaseUrl").then(({ apiBaseUrl }) => {
+  if (!apiBaseUrl || apiBaseUrl === LEGACY_LOCAL_API_URL) {
+    return chrome.storage.sync.set({ apiBaseUrl: DEFAULT_API_BASE_URL });
+  }
+});
 
 async function runAnalyzeJob(msg: AnalyzeMessage): Promise<void> {
   const jobT0 = performance.now();
@@ -90,12 +102,18 @@ async function runAnalyzeJob(msg: AnalyzeMessage): Promise<void> {
       let message = `HTTP ${res.status}: `;
       try {
         const j = JSON.parse(text) as {
+          error?: string;
           message?: string;
           hint?: string;
           details?: string;
         };
-        if (j && typeof j === "object" && typeof j.message === "string") {
+        if (res.status === 401) {
+          message =
+            "API key required. Open extension Options and paste the same key as Railway INGREDIENT_SCANNER_API_KEYS.";
+        } else if (j && typeof j === "object" && typeof j.message === "string") {
           message += [j.message, j.hint, j.details].filter((x) => typeof x === "string" && x.length > 0).join(" — ");
+        } else if (j?.hint) {
+          message += j.hint;
         } else {
           message += text;
         }
