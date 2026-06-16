@@ -340,14 +340,16 @@ export function mountAnalyzePanel(): void {
     }
   }
 
+  let analyzeRunning = false;
+
   async function run(opts: { forceRefresh: boolean }): Promise<void> {
+    if (analyzeRunning) return;
+    analyzeRunning = true;
     const clickT0 = performance.now();
     try {
     setAnalyzeButtonsDisabled(true);
     resultsEl.hidden = true;
-    setStatus(
-      opts.forceRefresh ? "Reading page…" : "Reading page…",
-    );
+    setStatus(opts.forceRefresh ? "Re-analyzing (full pipeline)…" : "Analyzing…");
     panelLog("analyze_click", performance.now() - clickT0, { force_refresh: opts.forceRefresh });
 
     const tabId = await getActiveTabId();
@@ -391,6 +393,11 @@ export function mountAnalyzePanel(): void {
       return;
     }
 
+    const useForceRefresh = opts.forceRefresh ? true : Boolean(settings.forceRefresh);
+    if (settings.forceRefresh && !opts.forceRefresh) {
+      void chrome.storage.sync.set({ forceRefresh: false });
+    }
+
     const apiBaseUrl = String(settings.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
     const maxImages = Number(settings.maxGalleryImages ?? 12);
 
@@ -406,7 +413,7 @@ export function mountAnalyzePanel(): void {
       payload: {
         ...extract.payload,
         analysisMode: settings.analysisMode === "DOM_ONLY" ? "DOM_ONLY" : "DOM_AND_VISION",
-        forceRefresh: opts.forceRefresh ? true : Boolean(settings.forceRefresh),
+        forceRefresh: useForceRefresh,
         imageUrls: (extract.payload.imageUrls as string[]).slice(0, maxImages),
         userPreferences: settings.userPreferences as Record<string, boolean> | undefined,
       },
@@ -435,14 +442,19 @@ export function mountAnalyzePanel(): void {
     }
 
     if (!resp?.ok || resp.accepted !== true) {
+      const errMsg =
+        resp?.error === "analysis_already_running"
+          ? "Analysis already running — wait for the current result."
+          : (resp?.error ?? "Could not start analysis job.");
       await chrome.storage.local.set({
         [ANALYSIS_JOB_KEY]: {
           phase: "error",
           tabId,
-          message: resp?.error ?? "Could not start analysis job.",
+          message: errMsg,
           finishedAt: Date.now(),
         } satisfies AnalysisJobState,
       });
+      setStatus(errMsg);
       setAnalyzeButtonsDisabled(false);
       return;
     }
@@ -456,6 +468,8 @@ export function mountAnalyzePanel(): void {
       panelLog("run_failed", performance.now() - clickT0, { error: message });
       setStatus(message);
       setAnalyzeButtonsDisabled(false);
+    } finally {
+      analyzeRunning = false;
     }
   }
 

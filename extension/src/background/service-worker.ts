@@ -6,6 +6,9 @@ const ANALYZE_TIMEOUT_MS = 120_000;
 
 const SW_TAG = "[AIScanner:SW]";
 
+/** One in-flight analyze per tab — avoids duplicate Railway requests from double-clicks. */
+const inFlightByTab = new Map<number, Promise<void>>();
+
 function swLog(phase: string, elapsedMs: number, extra?: Record<string, unknown>): void {
   console.info(SW_TAG, {
     wall_iso: new Date().toISOString(),
@@ -215,7 +218,15 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     return false;
   }
 
-  void runAnalyzeJob(msg as AnalyzeMessage);
+  if (inFlightByTab.has(msg.tabId)) {
+    sendResponse({ ok: false, error: "analysis_already_running" });
+    return false;
+  }
+
+  const job = runAnalyzeJob(msg as AnalyzeMessage).finally(() => {
+    inFlightByTab.delete(msg.tabId!);
+  });
+  inFlightByTab.set(msg.tabId, job);
   sendResponse({ ok: true, accepted: true as const });
   return false;
 });

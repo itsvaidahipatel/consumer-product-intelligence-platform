@@ -89,6 +89,16 @@ async function enrichWithRagAndGraph(
   log: PipelineLog,
   logBase: Record<string, unknown>,
 ): Promise<AnalyzeProductResponse> {
+  const { identified, unknown } = ingredientStats(response);
+  if (unknown === 0 && identified > 0) {
+    logPipelinePhase(log, logBase, "rag_skipped", 0, { reason: "encyclopedia_complete" });
+    return {
+      ...response,
+      evidenceCount: countEvidenceRefs(response.ingredients),
+      generalRisk: classificationToGeneralRisk(response.productClassification),
+    };
+  }
+
   const t0 = performance.now();
   const ingredients = await Promise.all(
     response.ingredients.map(async (ing) => {
@@ -105,7 +115,7 @@ async function enrichWithRagAndGraph(
     }),
   );
 
-  logPipelinePhase(log, logBase, "agent_rag_enrich", performance.now() - t0, {
+  logPipelinePhase(log, logBase, "rag_enrich", performance.now() - t0, {
     ingredient_count: ingredients.length,
   });
 
@@ -228,8 +238,9 @@ export async function runAnalyzeProductPipeline(args: AnalyzePipelineArgs): Prom
     });
 
     const timingSummary = finalizeTiming(timing);
-    try {
-      await args.db.insert(analysisRuns).values({
+    void args.db
+      .insert(analysisRuns)
+      .values({
         analysisId: response.analysisId ?? null,
         correlationId: args.correlationId,
         wallMs: timingSummary.totalMs,
@@ -239,13 +250,13 @@ export async function runAnalyzeProductPipeline(args: AnalyzePipelineArgs): Prom
         llmOutputTokens: 0,
         modelId: "cache",
         pipelineVersion: PIPELINE_VERSION,
+      })
+      .catch(() => {
+        /* telemetry table may not exist yet */
       });
-    } catch {
-      /* telemetry table may not exist yet */
-    }
 
     endSpan(args.correlationId, "agent_coordinator");
-    await traceLangfuseEvent({
+    void traceLangfuseEvent({
       correlationId: args.correlationId,
       name: "analyze_complete",
       metadata: { wall_ms: timingSummary.totalMs, cache_fast_path: true },
@@ -253,11 +264,12 @@ export async function runAnalyzeProductPipeline(args: AnalyzePipelineArgs): Prom
 
     args.log.info({
       ...omitInternalLogFields(logBase),
-      event: "analyze_timing_summary",
-      timestamp: timingSummary.completedAt,
-      total_ms: timingSummary.totalMs,
+      event: "analyze_complete",
+      result_source: "cache",
       cache_fast_path: true,
-      phases: timingSummary.phases,
+      total_ms: timingSummary.totalMs,
+      timestamp: timingSummary.completedAt,
+      ingredient_count: response.totalIngredients,
     });
 
     return response;
@@ -341,7 +353,7 @@ export async function runAnalyzeProductPipeline(args: AnalyzePipelineArgs): Prom
   }
 
   endSpan(args.correlationId, "agent_coordinator");
-  await traceLangfuseEvent({
+  void traceLangfuseEvent({
     correlationId: args.correlationId,
     name: "analyze_complete",
     metadata: { wall_ms: timingSummary.totalMs, phases: timingSummary.phases.length },
@@ -349,10 +361,12 @@ export async function runAnalyzeProductPipeline(args: AnalyzePipelineArgs): Prom
 
   args.log.info({
     ...omitInternalLogFields(logBase),
-    event: "analyze_timing_summary",
-    timestamp: timingSummary.completedAt,
+    event: "analyze_complete",
+    result_source: response.resultSource,
     total_ms: timingSummary.totalMs,
-    phases: timingSummary.phases,
+    timestamp: timingSummary.completedAt,
+    ingredient_count: response.totalIngredients,
+    skipped_llm: rec.skippedLlm,
   });
 
   return response;

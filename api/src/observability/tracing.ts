@@ -12,17 +12,19 @@ export function endSpan(correlationId: string, name: string): number {
   if (!span) return 0;
   const durationMs = Date.now() - span.start;
   spans.delete(key);
-  // eslint-disable-next-line no-console
-  console.info(
-    JSON.stringify({
-      event: "otel_span",
-      correlation_id: correlationId,
-      name,
-      duration_ms: durationMs,
-      timestamp: new Date().toISOString(),
-      ...span.attrs,
-    }),
-  );
+  if (process.env.NODE_ENV !== "production") {
+    // eslint-disable-next-line no-console
+    console.info(
+      JSON.stringify({
+        event: "otel_span",
+        correlation_id: correlationId,
+        name,
+        duration_ms: durationMs,
+        timestamp: new Date().toISOString(),
+        ...span.attrs,
+      }),
+    );
+  }
   return durationMs;
 }
 

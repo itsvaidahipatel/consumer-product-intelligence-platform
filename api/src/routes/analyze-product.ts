@@ -91,15 +91,12 @@ async function handleAnalyzeProductPost(
 
   pipelineLog.info(
     {
-      event: "analyze_product_request_accepted",
-      timestamp: new Date().toISOString(),
+      event: "analyze_start",
       site_id: parsed.data.siteId,
-      image_url_count: parsed.data.imageUrls.length,
-      analysis_mode: parsed.data.analysisMode,
       force_refresh: Boolean(parsed.data.forceRefresh),
-      raw_text_chars: parsed.data.rawIngredientText.length,
+      ingredient_chars: parsed.data.rawIngredientText.length,
     },
-    "analyze_product_request",
+    "analyze_start",
   );
 
   try {
@@ -110,21 +107,6 @@ async function handleAnalyzeProductPost(
       vision: deps.vision,
       correlationId,
       log: pipelineLog,
-    });
-
-    const outcome = result.resultSource === "cache" ? "cache_hit" : "success";
-
-    req.log.info({
-      correlation_id: correlationId,
-      timestamp: new Date().toISOString(),
-      outcome,
-      duration_ms: Date.now() - started,
-      total_ingredients: result.totalIngredients,
-      result_source: result.resultSource,
-      analysis_id: result.analysisId,
-      timing_phases: result.timing?.phases.length,
-      service: deps.env.SERVICE_NAME,
-      version: SERVICE_VERSION,
     });
 
     void reply.send(result);

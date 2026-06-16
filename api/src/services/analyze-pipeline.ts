@@ -148,48 +148,39 @@ export async function buildStoredAnalysisResponse(
   logBase: Record<string, unknown>,
   opts: { resultSource: "cache" | "stored"; cacheReason?: string },
 ): Promise<AnalyzeProductResponse | null> {
-  let t = nowMs();
-  const rows = await db
-    .select({
-      pai: productAnalysisIngredients,
-      ci: canonicalIngredients,
-    })
-    .from(productAnalysisIngredients)
-    .leftJoin(canonicalIngredients, eq(productAnalysisIngredients.normalizedIngredientId, canonicalIngredients.id))
-    .where(eq(productAnalysisIngredients.analysisId, analysisId))
-    .orderBy(asc(productAnalysisIngredients.orderIndex));
-
-  logPipelinePhase(log, logBase, "cache_load_ingredient_rows", nowMs() - t, {
-    row_count: rows.length,
-    analysis_id: analysisId,
-  });
-
-  t = nowMs();
-  const analysis = await db
-    .select()
-    .from(productAnalyses)
-    .where(eq(productAnalyses.id, analysisId))
-    .limit(1);
-
-  logPipelinePhase(log, logBase, "cache_load_analysis_meta", nowMs() - t, {
-    analysis_id: analysisId,
-    meta_found: Boolean(analysis[0]),
-  });
+  const tLoad = nowMs();
+  const [rows, analysis] = await Promise.all([
+    db
+      .select({
+        pai: productAnalysisIngredients,
+        ci: canonicalIngredients,
+      })
+      .from(productAnalysisIngredients)
+      .leftJoin(canonicalIngredients, eq(productAnalysisIngredients.normalizedIngredientId, canonicalIngredients.id))
+      .where(eq(productAnalysisIngredients.analysisId, analysisId))
+      .orderBy(asc(productAnalysisIngredients.orderIndex)),
+    db.select().from(productAnalyses).where(eq(productAnalyses.id, analysisId)).limit(1),
+  ]);
 
   const meta = analysis[0];
   if (!meta) {
+    logPipelinePhase(log, logBase, "cache_load", nowMs() - tLoad, {
+      analysis_id: analysisId,
+      meta_found: false,
+    });
     return null;
   }
 
-  const regulatoryByIngredientId = new Map<
-    string,
-    Record<string, "allowed" | "restricted" | "banned">
-  >();
   const canonIds = [
     ...new Set(
       rows.map((r) => r.pai.normalizedIngredientId).filter((id): id is string => Boolean(id)),
     ),
   ];
+
+  const regulatoryByIngredientId = new Map<
+    string,
+    Record<string, "allowed" | "restricted" | "banned">
+  >();
   if (canonIds.length > 0) {
     const regs = await db
       .select()
@@ -205,6 +196,12 @@ export async function buildStoredAnalysisResponse(
       map[r.countryCode.toLowerCase()] = r.status;
     }
   }
+
+  logPipelinePhase(log, logBase, "cache_load", nowMs() - tLoad, {
+    analysis_id: analysisId,
+    row_count: rows.length,
+    meta_found: true,
+  });
 
   const ingredients: IngredientResult[] = rows.map(({ pai, ci }) => {
     const tier = pai.tierUsed;

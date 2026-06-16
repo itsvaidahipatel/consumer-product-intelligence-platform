@@ -3,13 +3,18 @@ import type { PhaseTimingCollector } from "./phase-timing.js";
 
 export type PipelineLog = FastifyBaseLogger;
 
+/** Granular per-step logs (default off in production). Set PIPELINE_VERBOSE_LOGS=true to enable. */
+export const pipelineVerboseLogs =
+  process.env.PIPELINE_VERBOSE_LOGS === "true" ||
+  (process.env.PIPELINE_VERBOSE_LOGS !== "false" && process.env.NODE_ENV !== "production");
+
 export function omitInternalLogFields(base: Record<string, unknown>): Record<string, unknown> {
   const out = { ...base };
   delete (out as { timing_collector?: unknown }).timing_collector;
   return out;
 }
 
-/** Structured pipeline timing (pino JSON fields). */
+/** Structured pipeline timing (pino JSON fields). In production only records timing unless verbose. */
 export function logPipelinePhase(
   log: PipelineLog,
   base: Record<string, unknown>,
@@ -24,8 +29,10 @@ export function logPipelinePhase(
   const collector = base.timing_collector as PhaseTimingCollector | undefined;
   collector?.record(phase, durationMs);
 
+  if (!pipelineVerboseLogs) return;
+
   const logFields = omitInternalLogFields(base);
-  log.info(
+  log.debug(
     {
       ...logFields,
       event: "pipeline_phase",
@@ -35,7 +42,7 @@ export function logPipelinePhase(
       ...(elapsedMs != null ? { elapsed_ms: elapsedMs } : {}),
       ...extra,
     },
-    `pipeline:${phase}`,
+    phase,
   );
 }
 
