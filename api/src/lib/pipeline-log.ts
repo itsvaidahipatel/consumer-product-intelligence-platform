@@ -49,3 +49,25 @@ export function logPipelinePhase(
 export function nowMs(): number {
   return performance.now();
 }
+
+/** High-signal progress markers (always logged at info in production). */
+export function logAnalyzeMilestone(
+  log: PipelineLog,
+  base: Record<string, unknown>,
+  milestone: string,
+  extra?: Record<string, unknown>,
+): void {
+  const requestStartedAt = base.request_started_at as number | undefined;
+  const elapsedMs =
+    typeof requestStartedAt === "number" ? Date.now() - requestStartedAt : undefined;
+  log.info(
+    {
+      ...omitInternalLogFields(base),
+      event: "analyze_progress",
+      milestone,
+      ...(elapsedMs != null ? { elapsed_ms: elapsedMs } : {}),
+      ...extra,
+    },
+    milestone,
+  );
+}

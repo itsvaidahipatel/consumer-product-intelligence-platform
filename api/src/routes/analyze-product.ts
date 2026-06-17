@@ -7,6 +7,9 @@ import type { VisionClient } from "../services/vision.js";
 import { runAnalyzeProductPipeline } from "../services/analyze-orchestrator.js";
 import { SERVICE_VERSION } from "../version.js";
 import { ensureApiKeyAuthorized, parseApiKeys } from "../lib/api-key-guard.js";
+import { withTimeout } from "../lib/with-timeout.js";
+
+const ANALYZE_REQUEST_TIMEOUT_MS = 120_000;
 
 type AnalysisErrorBody = {
   error: "analysis_failed";
@@ -102,29 +105,42 @@ async function handleAnalyzeProductPost(
   );
 
   try {
-    const result = await runAnalyzeProductPipeline({
-      db: deps.db,
-      env: deps.env,
-      req: parsed.data,
-      vision: deps.vision,
-      correlationId,
-      log: pipelineLog,
-    });
+    const result = await withTimeout(
+      runAnalyzeProductPipeline({
+        db: deps.db,
+        env: deps.env,
+        req: parsed.data,
+        vision: deps.vision,
+        correlationId,
+        log: pipelineLog,
+      }),
+      ANALYZE_REQUEST_TIMEOUT_MS,
+      "analyze_request",
+    );
 
     void reply.send(result);
   } catch (err) {
+    const isTimeout = err instanceof Error && err.message.includes("analyze_request_timeout");
     req.log.error(
       {
         correlation_id: correlationId,
         outcome: "failure",
-        failure_stage: "analyze_product_pipeline",
+        failure_stage: isTimeout ? "analyze_request_timeout" : "analyze_product_pipeline",
         duration_ms: Date.now() - started,
         service: deps.env.SERVICE_NAME,
         version: SERVICE_VERSION,
         err,
       },
-      "analyze_product_failed",
+      isTimeout ? "analyze_request_timeout" : "analyze_product_failed",
     );
+
+    if (isTimeout) {
+      void reply.code(504).send({
+        error: "analysis_failed",
+        message: "Analysis timed out after 120 seconds. Try again or switch to DOM-only mode in extension Options.",
+      });
+      return;
+    }
 
     const { status, body } = analysisFailureResponse(err);
     void reply.code(status).send(body);

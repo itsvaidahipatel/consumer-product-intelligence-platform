@@ -1,5 +1,8 @@
 import { ImageAnnotatorClient } from "@google-cloud/vision";
 import { extractBoundingBoxes, type OcrBoundingBox } from "./ocr-rich.js";
+import { withTimeout } from "../lib/with-timeout.js";
+
+const VISION_OCR_TIMEOUT_MS = 45_000;
 
 export type DocumentOcrResult = {
   text: string;
@@ -45,7 +48,11 @@ export function createVisionFromEnv(credentialsJson?: string): VisionClient | nu
       return { text: rich.text, confidence: rich.confidence };
     },
     async documentTextRichFromBuffer(buffer: Buffer): Promise<RichDocumentOcrResult> {
-      const [result] = await client.documentTextDetection({ image: { content: buffer } });
+      const [result] = await withTimeout(
+        client.documentTextDetection({ image: { content: buffer } }),
+        VISION_OCR_TIMEOUT_MS,
+        "vision_document_text_detection",
+      );
       const full = result.fullTextAnnotation;
       const text = full?.text?.trim() ?? "";
       const confidence = confidenceFromAnnotation(

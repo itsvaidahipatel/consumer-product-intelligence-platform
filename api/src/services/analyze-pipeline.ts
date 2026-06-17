@@ -25,7 +25,7 @@ import { fetchImagesBounded, sha256Hex } from "./image-fetch.js";
 import { findLatestCacheableAnalysis, matchIngredientTokens } from "./ingredient-match.js";
 import { classifyProduct, labelsForProductClassification } from "./product-classification.js";
 import type { VisionClient } from "./vision.js";
-import { logPipelinePhase, nowMs, type PipelineLog } from "../lib/pipeline-log.js";
+import { logAnalyzeMilestone, logPipelinePhase, nowMs, type PipelineLog } from "../lib/pipeline-log.js";
 import {
   selectDomOnlyForVisionGate,
   selectWinningIngredientCandidate,
@@ -36,7 +36,7 @@ import type { RichDocumentOcrResult } from "./vision.js";
 import type { PhaseTimingCollector } from "../lib/phase-timing.js";
 
 const CACHE_MIN_CONFIDENCE = 0.72;
-const MAX_VISION_IMAGES = 12;
+const MAX_VISION_IMAGES = 6;
 
 function rankVisionImageUrls(urls: string[], meta: AnalyzeProductRequest["imageMeta"]): string[] {
   const scored = urls.map((url, i) => ({
@@ -394,6 +394,12 @@ export async function runLegacyAnalyzeProductPipeline(args: {
     dom_token_count: domGatePick.tokens.length,
   });
 
+  logAnalyzeMilestone(log, logBase, "dom_scored", {
+    dom_token_count: domGatePick.tokens.length,
+    dom_completeness_flag: domCompleteness.completenessFlag,
+    vision_ranked_urls: rankedVisionUrls.length,
+  });
+
   if (wantsVision) {
     if (!vision) {
       pipelineWarnings.push(
@@ -401,6 +407,9 @@ export async function runLegacyAnalyzeProductPipeline(args: {
       );
       logPipelinePhase(log, logBase, "vision_skipped", 0, { reason: "not_configured" });
     } else {
+    logAnalyzeMilestone(log, logBase, "vision_start", {
+      image_count: rankedVisionUrls.length,
+    });
     const visionPhaseStart = nowMs();
     let t = nowMs();
     const buffers = await fetchImagesBounded(rankedVisionUrls);
@@ -448,13 +457,25 @@ export async function runLegacyAnalyzeProductPipeline(args: {
               imageUrlHash,
             };
           }
-          const rich = await vision.documentTextRichFromBuffer(buf);
-          return {
-            ...rich,
-            fromCache: false as const,
-            imageUrl: url,
-            imageUrlHash,
-          };
+          try {
+            const rich = await vision.documentTextRichFromBuffer(buf);
+            return {
+              ...rich,
+              fromCache: false as const,
+              imageUrl: url,
+              imageUrlHash,
+            };
+          } catch {
+            return {
+              text: "",
+              confidence: 0,
+              boundingBoxes: [],
+              rawAnnotation: undefined,
+              fromCache: false as const,
+              imageUrl: url,
+              imageUrlHash,
+            };
+          }
         }),
       );
       logPipelinePhase(log, logBase, "vision_ocr_batch", nowMs() - tBatch, {
@@ -499,6 +520,10 @@ export async function runLegacyAnalyzeProductPipeline(args: {
         "Product images could not be read (fetch or OCR returned empty). Try refreshing the product page.",
       );
     }
+    logAnalyzeMilestone(log, logBase, "vision_done", {
+      ocr_chunk_count: trimmedChunks.length,
+      ocr_char_total: ocrText.length,
+    });
     }
   }
 
@@ -541,6 +566,12 @@ export async function runLegacyAnalyzeProductPipeline(args: {
   let tMatch = nowMs();
   const matched = await matchIngredientTokens(db, pick.tokens, trackMatch);
   logPipelinePhase(log, logBase, "ingredient_match_total", nowMs() - tMatch, {
+    matched_count: matched.length,
+  });
+
+  logAnalyzeMilestone(log, logBase, "tokens_matched", {
+    winning_source: pick.source,
+    final_token_count: pick.tokens.length,
     matched_count: matched.length,
   });
 

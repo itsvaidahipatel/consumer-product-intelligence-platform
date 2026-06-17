@@ -3,11 +3,11 @@ import type { Db } from "../db/client.js";
 import type { Env } from "../env.js";
 import type { VisionClient } from "../services/vision.js";
 import type { PipelineLog } from "../lib/pipeline-log.js";
-import { logPipelinePhase, omitInternalLogFields } from "../lib/pipeline-log.js";
+import { logPipelinePhase, logAnalyzeMilestone, omitInternalLogFields } from "../lib/pipeline-log.js";
 import { runLegacyAnalyzeProductPipeline } from "./analyze-pipeline.js";
 import { retrieveEvidenceForIngredient } from "../rag/retrieve.js";
 import { applyPersonalization } from "../personalization/evaluate.js";
-import { createLlmClient, pickModelId } from "../llm/ollama.js";
+import { createLlmClient, pickModelId, isOllamaConfigured } from "../llm/ollama.js";
 import { queryIngredientRisks } from "../graph/neo4j.js";
 import { countEvidenceRefs } from "../lib/evidence.js";
 import { classificationToGeneralRisk } from "./response-enrich.js";
@@ -171,7 +171,7 @@ async function runRecommendationAgent(
   const mode = env.LLM_SUMMARY ?? "auto";
   const { identified, unknown } = ingredientStats(response);
 
-  if (mode === "off" || (mode === "auto" && unknown === 0 && identified > 0)) {
+  if (mode === "off" || !isOllamaConfigured(env) || (mode === "auto" && unknown === 0 && identified > 0)) {
     return {
       report: buildDeterministicReport(response),
       tokens: { in: 0, out: 0, model: mode === "off" ? "deterministic" : "auto-deterministic" },
@@ -228,6 +228,12 @@ export async function runAnalyzeProductPipeline(args: AnalyzePipelineArgs): Prom
   await traceLangfuseEvent({ correlationId: args.correlationId, name: "analyze_start" });
 
   const legacy = await runLegacyAnalyzeProductPipeline({ ...args, timingCollector: timing });
+
+  logAnalyzeMilestone(args.log, logBase, "legacy_pipeline_done", {
+    result_source: legacy.resultSource,
+    ingredient_count: legacy.totalIngredients,
+    provenance: legacy.provenance,
+  });
 
   if (legacy.resultSource === "cache") {
     const tCache = performance.now();

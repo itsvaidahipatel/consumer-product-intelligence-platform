@@ -1,4 +1,7 @@
 import type { Env } from "../env.js";
+import { withTimeout } from "../lib/with-timeout.js";
+
+const EMBED_TIMEOUT_MS = 12_000;
 
 const cache = new Map<string, number[]>();
 
@@ -28,12 +31,16 @@ export function createEmbeddingService(env: Env) {
       if (provider === "ollama" && env.OLLAMA_BASE_URL) {
         const base = env.OLLAMA_BASE_URL.replace(/\/$/, "");
         const model = env.EMBEDDING_MODEL ?? "nomic-embed-text";
-        const res = await fetch(`${base}/api/embeddings`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model, prompt: text }),
-        });
-        if (res.ok) {
+        const res = await withTimeout(
+          fetch(`${base}/api/embeddings`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ model, prompt: text }),
+          }),
+          EMBED_TIMEOUT_MS,
+          "ollama_embeddings",
+        ).catch(() => null);
+        if (res?.ok) {
           const data = (await res.json()) as { embedding?: number[] };
           const vector = data.embedding ?? hashEmbed(text, dims);
           cache.set(key, vector);

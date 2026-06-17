@@ -9,6 +9,16 @@ export type LlmCompletion = {
   modelId: string;
 };
 
+/** Railway has no local Ollama unless explicitly configured with a reachable URL. */
+export function isOllamaConfigured(env: Env): boolean {
+  const base = (env.OLLAMA_BASE_URL ?? "").trim();
+  if (!base) return false;
+  if (env.NODE_ENV === "production" && /localhost|127\.0\.0\.1/i.test(base)) {
+    return false;
+  }
+  return true;
+}
+
 export function createLlmClient(env: Env) {
   const baseUrl = (env.OLLAMA_BASE_URL ?? "http://localhost:11434").replace(/\/$/, "");
   const timeoutMs = env.OLLAMA_TIMEOUT_MS ?? 10_000;
