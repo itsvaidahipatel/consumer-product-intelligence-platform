@@ -197,8 +197,12 @@ function scoreIngredientChunk(text: string): number {
   let score = 0;
   if (/\bingredients\s*[:\-\u2013]/i.test(text)) score += 60;
   const commas = (text.match(/,/g) ?? []).length;
-  score += Math.min(commas * 4, 40);
+  score += Math.min(commas * 8, 80);
+  if (commas < 2) score -= 90;
   if (JUNK_CHUNK.test(text)) score -= 120;
+  if (/\b(?:benefits?|cleanses|hydrates|barrier|developed\s+with)\b/i.test(text) && commas < 3) {
+    score -= 100;
+  }
   if (text.length > 1200 && commas < 4) score -= 40;
   const inciHints = (text.match(/\b(?:aqua|water|glycerin|parfum|phenoxyethanol|ceramide|niacinamide|acid)\b/gi) ?? [])
     .length;
@@ -207,22 +211,59 @@ function scoreIngredientChunk(text: string): number {
   return score;
 }
 
-function extractTextAfterHeading(root: ParentNode, headingRe: RegExp): string {
-  const headings = Array.from(root.querySelectorAll("h1, h2, h3, h4, h5, h6, span.a-text-bold, th"));
+function isExactIngredientsLabel(label: string): boolean {
+  return /^ingredients?$/i.test(label.trim());
+}
+
+function looksLikeCommaInci(text: string): boolean {
+  const commas = (text.match(/,/g) ?? []).length;
+  return commas >= 2 && text.length >= 35;
+}
+
+function extractTextAfterHeading(root: ParentNode): string {
+  const headings = Array.from(
+    root.querySelectorAll("h1, h2, h3, h4, h5, h6, span.a-text-bold, th, div.a-text-bold"),
+  );
   for (const h of headings) {
     const label = h.textContent?.replace(/\s+/g, " ").trim() ?? "";
-    if (!headingRe.test(label)) continue;
-    const sibling = h.nextElementSibling;
-    if (sibling?.textContent?.trim()) {
-      return `Ingredients: ${sibling.textContent.replace(/\s+/g, " ").trim()}`;
-    }
-    const parent = h.parentElement;
-    const p = parent?.querySelector("p, td, div.a-section");
-    if (p?.textContent?.trim() && p !== h) {
-      return `Ingredients: ${p.textContent.replace(/\s+/g, " ").trim()}`;
+    if (!isExactIngredientsLabel(label)) continue;
+
+    let sibling: Element | null = h.nextElementSibling;
+    for (let step = 0; step < 4 && sibling; step += 1) {
+      const text = sibling.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      if (text.length > 20 && looksLikeCommaInci(text)) {
+        return `Ingredients: ${text}`;
+      }
+      sibling = sibling.nextElementSibling;
     }
   }
   return "";
+}
+
+function extractFromAmazonIngredientsBlock(): string {
+  const selectors = [
+    "#important-information-ingredients",
+    "#importantInformation_feature_div #important-information-ingredients",
+    '[data-feature-name="importantInformation"] #important-information-ingredients',
+  ];
+  for (const sel of selectors) {
+    const el = document.querySelector(sel);
+    const text = el?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    if (text.length > 20 && looksLikeCommaInci(text)) {
+      return `Ingredients: ${text}`;
+    }
+  }
+  return "";
+}
+
+function extractCommaInciFromBody(): string {
+  const body = document.body.innerText ?? "";
+  const match = body.match(
+    /\bingredients?\s*[:]\s*([A-Za-z0-9()[\]./\-–—\s,%]{35,900})/i,
+  );
+  if (!match?.[1]) return "";
+  const candidate = match[1].replace(/\s+/g, " ").trim();
+  return looksLikeCommaInci(candidate) ? `Ingredients: ${candidate}` : "";
 }
 
 function extractFromDetailTable(): string {
@@ -245,16 +286,26 @@ function extractFromDetailTable(): string {
 /** Amazon.in: prefer Important Information / spec table over broad A+ marketing blocks. */
 export function extractAmazonIndiaIngredients(): string {
   const fromTable = extractFromDetailTable();
-  if (fromTable) {
+  if (fromTable && looksLikeCommaInci(fromTable)) {
     return stripRetailerNoise(sanitizeDomIngredientBlob(fromTable));
+  }
+
+  const fromAmazonBlock = extractFromAmazonIngredientsBlock();
+  if (fromAmazonBlock) {
+    return stripRetailerNoise(sanitizeDomIngredientBlob(fromAmazonBlock));
   }
 
   const important = document.querySelector("#importantInformation_feature_div");
   if (important) {
-    const fromHeading = extractTextAfterHeading(important, /^ingredients?$/i);
+    const fromHeading = extractTextAfterHeading(important);
     if (fromHeading) {
       return stripRetailerNoise(sanitizeDomIngredientBlob(fromHeading));
     }
+  }
+
+  const fromBody = extractCommaInciFromBody();
+  if (fromBody) {
+    return stripRetailerNoise(sanitizeDomIngredientBlob(fromBody));
   }
 
   return findIngredientishText([
@@ -298,5 +349,12 @@ export function findIngredientishText(selectors: readonly string[]): string {
   }
 
   const best = chunks.sort((a, b) => scoreIngredientChunk(b) - scoreIngredientChunk(a))[0]!;
+  if (!looksLikeCommaInci(best)) {
+    const fromBody = extractCommaInciFromBody();
+    if (fromBody) {
+      return stripRetailerNoise(sanitizeDomIngredientBlob(fromBody));
+    }
+    return "";
+  }
   return stripRetailerNoise(sanitizeDomIngredientBlob(best));
 }

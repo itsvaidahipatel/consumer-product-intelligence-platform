@@ -60,4 +60,14 @@ describe("extractAmazonIndiaIngredients", () => {
     `;
     expect(extractAmazonIndiaIngredients()).toContain("Hyaluronic Acid");
   });
+
+  it("rejects marketing bullets without comma-separated INCI", () => {
+    document.body.innerHTML = `
+      <div id="importantInformation_feature_div">
+        Key ingredients ceramides 1 hyaluronic acid benefits cleanses
+        hydrates & helps restore the protective skin barrier
+      </div>
+    `;
+    expect(extractAmazonIndiaIngredients()).toBe("");
+  });
 });

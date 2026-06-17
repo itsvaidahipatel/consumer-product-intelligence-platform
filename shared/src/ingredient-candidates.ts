@@ -122,11 +122,24 @@ export function stripPercentageHints(text: string): string {
   return text.replace(/\b\d+(?:\.\d+)?\s*%/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function isMarketingIngredientToken(token: string): boolean {
+  const s = token.toLowerCase().trim();
+  if (s.length < 3) return true;
+  if (/^\d+\s*[-.)]\s*\w+/.test(s)) return true;
+  if (/^ceramides?\s+\d+$/.test(s)) return true;
+  if (/\b(?:benefits?|cleanses|hydrates|restores?|barrier|developed\s+with|fragrance-free)\b/.test(s)) {
+    return true;
+  }
+  if (/\s&\shelps\b/.test(s)) return true;
+  if (s.split(/\s+/).length > 5 && !/,/.test(s) && !/\//.test(s)) return true;
+  return false;
+}
+
 export function tokensFromCandidateText(text: string): string[] {
   const stripped = stripPercentageHints(stripIngredientLabelPrefixes(text));
   return splitIngredientCandidateText(stripped)
     .map((p) => normalizeIngredientToken(p))
-    .filter((t) => Boolean(t) && !/^\d+$/.test(t));
+    .filter((t) => Boolean(t) && !/^\d+$/.test(t) && !isMarketingIngredientToken(t));
 }
 
 export type IngredientTextSource = "dom" | "ocr";

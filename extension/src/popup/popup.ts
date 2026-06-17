@@ -12,6 +12,7 @@ import {
 } from "../analyze/analyze-flow.js";
 
 const POPUP_TIMEOUT_MS = 130_000;
+const RESULTS_CONFIRM_MS = 2_500;
 
 const productTitleEl = document.querySelector<HTMLHeadingElement>("#productTitle")!;
 const analyzeBtn = document.querySelector<HTMLButtonElement>("#analyze")!;
@@ -25,6 +26,7 @@ privacyLink.href = chrome.runtime.getURL("privacy-policy.html");
 let waitingTabId: number | undefined;
 let waitingRunId: string | undefined;
 let closeFallbackTimer: ReturnType<typeof setTimeout> | undefined;
+let resultsConfirmTimer: ReturnType<typeof setTimeout> | undefined;
 
 function setButtonsDisabled(disabled: boolean): void {
   analyzeBtn.disabled = disabled;
@@ -32,6 +34,7 @@ function setButtonsDisabled(disabled: boolean): void {
 }
 
 function showLoading(label: string): void {
+  clearResultsConfirm();
   statusEl.hidden = false;
   statusEl.className = "popup__status popup__status--loading";
   statusEl.setAttribute("role", "status");
@@ -40,10 +43,25 @@ function showLoading(label: string): void {
   actionsEl.hidden = true;
 }
 
+function showSuccess(message: string): void {
+  waitingTabId = undefined;
+  waitingRunId = undefined;
+  clearCloseFallback();
+  clearResultsConfirm();
+  statusEl.hidden = false;
+  statusEl.className = "popup__status popup__status--success";
+  statusEl.setAttribute("role", "status");
+  statusEl.setAttribute("aria-live", "polite");
+  statusEl.textContent = message;
+  actionsEl.hidden = false;
+  setButtonsDisabled(false);
+}
+
 function showError(message: string): void {
   waitingTabId = undefined;
   waitingRunId = undefined;
   clearCloseFallback();
+  clearResultsConfirm();
   statusEl.hidden = false;
   statusEl.className = "popup__status popup__status--error";
   statusEl.setAttribute("role", "alert");
@@ -59,6 +77,13 @@ function clearCloseFallback(): void {
   }
 }
 
+function clearResultsConfirm(): void {
+  if (resultsConfirmTimer != null) {
+    clearTimeout(resultsConfirmTimer);
+    resultsConfirmTimer = undefined;
+  }
+}
+
 function scheduleCloseFallback(): void {
   clearCloseFallback();
   closeFallbackTimer = setTimeout(() => {
@@ -68,14 +93,38 @@ function scheduleCloseFallback(): void {
   }, POPUP_TIMEOUT_MS);
 }
 
-function tryClosePopup(state: ResultsVisibleState | undefined): void {
-  if (waitingTabId == null || !waitingRunId || !state) return;
-  if (state.tabId !== waitingTabId || state.runId !== waitingRunId) return;
+async function readResultsVisible(): Promise<ResultsVisibleState | undefined> {
+  const stored = await chrome.storage.local.get(RESULTS_VISIBLE_KEY);
+  return stored[RESULTS_VISIBLE_KEY] as ResultsVisibleState | undefined;
+}
 
-  waitingTabId = undefined;
-  waitingRunId = undefined;
-  clearCloseFallback();
-  window.close();
+function resultsMatchJob(
+  visible: ResultsVisibleState | undefined,
+  tabId: number,
+  runId: string,
+): boolean {
+  return visible?.tabId === tabId && visible?.runId === runId;
+}
+
+function confirmResultsOnPage(tabId: number, runId: string): void {
+  clearResultsConfirm();
+  resultsConfirmTimer = setTimeout(() => {
+    void readResultsVisible().then((visible) => {
+      if (resultsMatchJob(visible, tabId, runId)) {
+        showSuccess("Results are on the product page (bottom-right).");
+        return;
+      }
+      showError(
+        "Analysis finished but results could not be shown on this page. Reload the tab and try again.",
+      );
+    });
+  }, RESULTS_CONFIRM_MS);
+}
+
+function handleResultsVisible(state: ResultsVisibleState | undefined): void {
+  if (waitingTabId == null || !waitingRunId || !state) return;
+  if (!resultsMatchJob(state, waitingTabId, waitingRunId)) return;
+  showSuccess("Results are on the product page (bottom-right).");
 }
 
 async function loadProductTitle(): Promise<void> {
@@ -140,15 +189,13 @@ function applyJobState(job: AnalysisJobState | undefined): void {
   if (job.phase === "done") {
     if (waitingRunId && job.runId !== waitingRunId) return;
     showLoading("Showing results on page…");
-    void chrome.storage.local.get(RESULTS_VISIBLE_KEY).then((stored) => {
-      tryClosePopup(stored[RESULTS_VISIBLE_KEY] as ResultsVisibleState | undefined);
-    });
-    window.setTimeout(() => {
-      if (waitingRunId === job.runId) {
-        tryClosePopup({ tabId: job.tabId, runId: job.runId, at: Date.now() });
+    void readResultsVisible().then((visible) => {
+      if (resultsMatchJob(visible, job.tabId, job.runId)) {
+        showSuccess("Results are on the product page (bottom-right).");
+        return;
       }
-    }, 800);
-    return;
+      confirmResultsOnPage(job.tabId, job.runId);
+    });
   }
 }
 
@@ -160,7 +207,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 
   if (changes[RESULTS_VISIBLE_KEY]) {
-    tryClosePopup(changes[RESULTS_VISIBLE_KEY].newValue as ResultsVisibleState | undefined);
+    handleResultsVisible(changes[RESULTS_VISIBLE_KEY].newValue as ResultsVisibleState | undefined);
   }
 });
 
@@ -176,6 +223,12 @@ void loadProductTitle();
 
 void readAnalysisJob().then((job) => {
   if (job?.phase === "running" && job.runId) {
+    waitingTabId = job.tabId;
+    waitingRunId = job.runId;
+    applyJobState(job);
+    return;
+  }
+  if (job?.phase === "done" && job.runId) {
     waitingTabId = job.tabId;
     waitingRunId = job.runId;
     applyJobState(job);

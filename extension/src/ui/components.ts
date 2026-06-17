@@ -19,7 +19,11 @@ export function iconButton(label: string, attrs: Record<string, string> = {}): s
   const attrStr = Object.entries(attrs)
     .map(([k, v]) => `${k}="${escapeHtml(v)}"`)
     .join(" ");
-  return `<button type="button" class="btn btn--icon" aria-label="${escapeHtml(label)}" ${attrStr}>×</button>`;
+  return `<button type="button" class="btn btn--icon" aria-label="${escapeHtml(label)}" ${attrStr}>
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+      <path d="M3 3l8 8M11 3L3 11" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+    </svg>
+  </button>`;
 }
 
 export function flagBadge(flag: ProductFlag, text: string): string {
@@ -39,9 +43,12 @@ export function accordionSection(args: {
   title: string;
   tier: IngredientTier;
   bodyHtml: string;
+  count?: number;
   expanded?: boolean;
 }): string {
   const expanded = args.expanded ?? false;
+  const countLabel =
+    typeof args.count === "number" ? `<span class="accordion__count">${args.count}</span>` : "";
   return `<section class="accordion">
     <h3>
       <button
@@ -53,6 +60,7 @@ export function accordionSection(args: {
       >
         <span class="legend-dot legend-dot--${args.tier.toLowerCase()}" aria-hidden="true"></span>
         <span class="accordion__title">${escapeHtml(args.title)}</span>
+        ${countLabel}
         <span class="accordion__chevron" aria-hidden="true"></span>
       </button>
     </h3>

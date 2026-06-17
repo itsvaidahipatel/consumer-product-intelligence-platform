@@ -140,3 +140,10 @@ describe("buildScoredTextCandidates with ocrChunks", () => {
     expect(ocrTexts.some((t) => t.includes("Niacinamide"))).toBe(true);
   });
 });
+
+describe("tokensFromCandidateText", () => {
+  it("drops marketing phrases that are not INCI tokens", () => {
+    const tokens = tokensFromCandidateText(`Aqua, Glycerin, ceramides 1, hyaluronic acid benefits cleanses, Niacinamide`);
+    expect(tokens).toEqual(["aqua", "glycerin", "niacinamide"]);
+  });
+});

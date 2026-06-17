@@ -45,31 +45,36 @@
 }
 
 .btn--icon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border-radius: var(--radius-pill);
   font-size: 22px;
   line-height: 1;
   color: var(--text-muted);
-  background: transparent;
-  border: 1px solid transparent;
+  background: rgba(61, 56, 48, 0.05);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .btn--icon:hover {
   color: var(--text);
-  background: rgba(61, 56, 48, 0.06);
+  background: rgba(61, 56, 48, 0.08);
+  border-color: #ddd2c4;
+}
+
+.btn--icon svg {
+  display: block;
 }
 
 .flag {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 6px 12px;
   border-radius: var(--radius-pill);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0.03em;
   white-space: nowrap;
 }
 
@@ -136,14 +141,16 @@
 .chip {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
+  max-width: 100%;
+  padding: 5px 10px;
   border-radius: var(--radius-pill);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
-  line-height: 1.3;
+  line-height: 1.35;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
+  word-break: break-word;
 }
 
 .chip--black {
@@ -199,6 +206,16 @@
 
 .accordion__title {
   flex: 1;
+  min-width: 0;
+}
+
+.accordion__count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(61, 56, 48, 0.06);
 }
 
 .accordion__chevron {
@@ -250,7 +267,7 @@
 .chip-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .legend-row {

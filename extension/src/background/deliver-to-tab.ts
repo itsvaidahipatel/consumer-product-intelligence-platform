@@ -2,6 +2,8 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+type TabMessageReply = { ok?: boolean; error?: string };
+
 async function injectContent(tabId: number): Promise<boolean> {
   try {
     await chrome.scripting.executeScript({
@@ -21,8 +23,8 @@ export async function deliverToTab(
 ): Promise<boolean> {
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      await chrome.tabs.sendMessage(tabId, message);
-      return true;
+      const reply = (await chrome.tabs.sendMessage(tabId, message)) as TabMessageReply | undefined;
+      if (reply?.ok === true) return true;
     } catch {
       await injectContent(tabId);
       await sleep(80 * (attempt + 1));

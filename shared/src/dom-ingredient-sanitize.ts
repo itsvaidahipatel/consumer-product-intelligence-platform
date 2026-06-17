@@ -43,6 +43,11 @@ const POST_INCI_SECTION_MARKERS: RegExp[] = [
   /\bcustomer\s+reviews\b/i,
   /\bprice\b/i,
   /\bno\s+data\b/i,
+  /\bbenefits?\s+cleanses\b/i,
+  /\bhydrates?\s*&\s*helps\b/i,
+  /\bprotective\s+skin\s+barrier\b/i,
+  /\bgently\s+removes\b/i,
+  /\bit\s+gently\b/i,
 ];
 
 function hardChopBleed(s: string): string {
@@ -92,6 +97,9 @@ function isGarbageDomLine(line: string): boolean {
   if (/\b(?:cleanses|hydrates|moisturising|non-comedogenic|fragrance-free)\b/.test(s) && !/,/.test(s)) {
     return true;
   }
+  if (/\b(?:benefits?|barrier|restores?|developed\s+with)\b/.test(s) && !/,/.test(s)) return true;
+  if (/^\d+\s*[-.)]\s*\w+/.test(s)) return true;
+  if (/\s&\shelps\b/.test(s)) return true;
   return false;
 }
 

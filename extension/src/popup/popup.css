@@ -76,6 +76,12 @@
   border: 1px solid #f0d4cc;
 }
 
+.popup__status--success {
+  color: #2f5f45;
+  background: #eef8f1;
+  border: 1px solid #c8e6d4;
+}
+
 .popup__spinner {
   width: 16px;
   height: 16px;
