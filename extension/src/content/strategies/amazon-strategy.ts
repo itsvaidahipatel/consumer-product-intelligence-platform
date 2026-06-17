@@ -20,6 +20,7 @@ export class AmazonInStrategy extends BaseStrategy {
       "#importantInformation_feature_div",
       "#productDetails_techSpec_section_1",
       "#productDetails_detailBullets_sections1",
+      "#productOverview_feature_div",
     ]);
     const url = window.location.href;
     const productName = pickFirstText(cfg.title);

@@ -127,6 +127,8 @@ function isMarketingIngredientToken(token: string): boolean {
   if (s.length < 3) return true;
   if (/^\d+\s*[-.)]\s*\w+/.test(s)) return true;
   if (/^ceramides?\s+\d+$/.test(s)) return true;
+  if (/\bceramides?\s+\d+\b/.test(s) && !/\b(?:np|ap|eop)\b/.test(s)) return true;
+  if (/\bniacinamide\s+ceramides?\b/.test(s)) return true;
   if (/\b(?:benefits?|cleanses|hydrates|restores?|barrier|developed\s+with|fragrance-free)\b/.test(s)) {
     return true;
   }

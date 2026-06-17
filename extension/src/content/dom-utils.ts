@@ -217,7 +217,19 @@ function isExactIngredientsLabel(label: string): boolean {
 
 function looksLikeCommaInci(text: string): boolean {
   const commas = (text.match(/,/g) ?? []).length;
-  return commas >= 2 && text.length >= 35;
+  if (commas < 3 || text.length < 50) return false;
+  const tokens = text
+    .split(/,/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  if (tokens.length < 4) return false;
+  if (tokens.some((t) => /\b(?:benefits?|cleanses|hydrates|barrier|developed\s+with)\b/i.test(t))) {
+    return false;
+  }
+  if (tokens.some((t) => /\bceramides?\s+\d+\b/i.test(t) && !/\b(?:np|ap|eop)\b/i.test(t))) {
+    return false;
+  }
+  return true;
 }
 
 function extractTextAfterHeading(root: ParentNode): string {

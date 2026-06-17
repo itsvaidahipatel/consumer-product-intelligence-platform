@@ -7,8 +7,16 @@ const MAX_CONCURRENCY = 3;
 async function fetchWithLimits(url: string): Promise<Buffer> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const headers: Record<string, string> = {
+    Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  };
+  if (/amazon\.|media-amazon\.com|ssl-images-amazon/i.test(url)) {
+    headers.Referer = "https://www.amazon.in/";
+  }
   try {
-    const res = await fetch(url, { signal: controller.signal, redirect: "follow" });
+    const res = await fetch(url, { signal: controller.signal, redirect: "follow", headers });
     if (!res.ok) {
       throw new Error(`Image fetch failed (${res.status})`);
     }

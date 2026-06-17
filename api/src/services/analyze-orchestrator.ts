@@ -34,7 +34,9 @@ function ingredientStats(response: AnalyzeProductResponse): {
   unknown: number;
   fragrance: string[];
 } {
-  const identified = response.ingredients.filter((i) => i.description).length;
+  const identified = response.ingredients.filter((i) =>
+    i.sources?.includes("Internal Encyclopedia"),
+  ).length;
   const unknown = response.totalIngredients - identified;
   const fragrance = response.ingredients
     .filter((i) => /parfum|fragrance|linalool|citronellol|limonene|hexyl cinnamal/i.test(i.normalizedName))
@@ -63,7 +65,8 @@ function factCheck(response: AnalyzeProductResponse, report: string): { ok: bool
   const { identified, unknown } = ingredientStats(response);
 
   for (const ing of response.ingredients) {
-    if (ing.description && (!ing.evidenceRefs || ing.evidenceRefs.length === 0)) {
+    const encyclopediaMatched = ing.sources?.includes("Internal Encyclopedia");
+    if (encyclopediaMatched && (!ing.evidenceRefs || ing.evidenceRefs.length === 0)) {
       issues.push(`Missing evidence for ${ing.name}`);
     }
   }

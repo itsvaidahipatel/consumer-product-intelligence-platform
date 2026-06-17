@@ -47,6 +47,28 @@ function cleanSummary(text: string): string {
   return t;
 }
 
+function userFacingWarnings(warnings: string[] | undefined): string[] {
+  if (!warnings?.length) return [];
+  return warnings.filter(
+    (w) =>
+      !/fact-check notes?/i.test(w) &&
+      !/ai summary adjusted/i.test(w) &&
+      !/missing evidence for/i.test(w),
+  );
+}
+
+function dedupeIngredients(
+  ingredients: AnalyzeProductResponse["ingredients"],
+): AnalyzeProductResponse["ingredients"] {
+  const seen = new Set<string>();
+  return ingredients.filter((ing) => {
+    const key = (ing.normalizedName || ing.name).trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function tierIngredients(data: AnalyzeProductResponse, tier: IngredientTier) {
   return data.ingredients
     .map((ing, idx) => ({ ing, idx }))
@@ -165,14 +187,15 @@ export function showAnalysisError(message: string): void {
 export function showResultsCard(data: AnalyzeProductResponse): void {
   const flag = data.productClassification;
   const flagText = FLAG_LABELS[flag];
-  const expandTier = primaryTierToExpand(data);
+  const ingredients = dedupeIngredients(data.ingredients);
+  const expandTier = primaryTierToExpand({ ...data, ingredients });
 
-  const allChips = data.ingredients
+  const allChips = ingredients
     .map((ing) => ingredientChip(ing.name, ing.tier))
     .join("");
 
   const categoryAccordions = TIER_ORDER.map((tier) => {
-    const items = tierIngredients(data, tier);
+    const items = tierIngredients({ ...data, ingredients }, tier);
     if (items.length === 0) return "";
     return accordionSection({
       id: `tier-${tier.toLowerCase()}`,
@@ -184,12 +207,13 @@ export function showResultsCard(data: AnalyzeProductResponse): void {
     });
   }).join("");
 
+  const visibleWarnings = userFacingWarnings(data.warnings);
   const warningBanner =
-    data.warnings?.length || flag === "YELLOW"
+    visibleWarnings.length || flag === "YELLOW"
       ? `<div class="warning-banner" role="alert">
           <span class="warning-banner__icon" aria-hidden="true">!</span>
           <span>${escapeHtml(
-            data.warnings?.join(" ") ??
+            visibleWarnings[0] ??
               "The ingredient list appears incomplete. Results may be less accurate.",
           )}</span>
         </div>`
@@ -220,7 +244,7 @@ export function showResultsCard(data: AnalyzeProductResponse): void {
           <div class="results-card__header-copy">
             <div class="results-card__meta-row">
               <span class="results-card__brand">AI Scanner</span>
-              <span class="results-card__stat">${data.totalIngredients} ingredients</span>
+              <span class="results-card__stat">${ingredients.length} ingredients</span>
             </div>
             <div class="results-card__verdict-row">
               ${flagBadge(flag, flagText)}
@@ -237,7 +261,7 @@ export function showResultsCard(data: AnalyzeProductResponse): void {
         <details class="results-fold" open>
           <summary class="results-fold__trigger">
             <span>All ingredients</span>
-            <span class="results-fold__count">${data.totalIngredients}</span>
+            <span class="results-fold__count">${ingredients.length}</span>
           </summary>
           <div class="chip-grid chip-grid--compact">${allChips}</div>
         </details>

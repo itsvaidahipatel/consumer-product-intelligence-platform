@@ -65,18 +65,21 @@ function requestLogContext(req: AnalyzeProductRequest): Record<string, unknown> 
   };
 }
 
+const MIN_COMPLETE_INGREDIENTS = 8;
+
 function shouldRunVision(args: {
   mode: "DOM_ONLY" | "DOM_AND_VISION";
   raw: string;
+  domTokenCount: number;
   completenessFlag: boolean;
   hasImages: boolean;
 }): boolean {
   if (args.mode === "DOM_ONLY") return false;
   if (!args.hasImages) return false;
-  // Skip OCR when the retailer DOM already has a complete ingredient list.
-  if (args.completenessFlag && args.raw.trim()) return false;
   if (!args.raw.trim()) return true;
-  return !args.completenessFlag;
+  if (args.domTokenCount < MIN_COMPLETE_INGREDIENTS) return true;
+  if (!args.completenessFlag) return true;
+  return false;
 }
 
 function provenanceForSource(source: "dom" | "ocr" | "merged"): "retailer_page" | "product_images" | "both" {
@@ -372,20 +375,32 @@ export async function runLegacyAnalyzeProductPipeline(args: {
   const wantsVision = shouldRunVision({
     mode: req.analysisMode,
     raw: (domGatePick.winningRawText || sanitizedDom).trim(),
+    domTokenCount: domGatePick.tokens.length,
     completenessFlag: domCompleteness.completenessFlag,
     hasImages: rankedVisionUrls.length > 0,
   });
+
+  const pipelineWarnings: string[] = [];
+  if (req.analysisMode !== "DOM_ONLY" && rankedVisionUrls.length === 0) {
+    pipelineWarnings.push(
+      "No product images were captured from this page, so pack-label OCR was skipped.",
+    );
+  }
 
   logPipelinePhase(log, logBase, "vision_decision", 0, {
     wants_vision: wantsVision,
     vision_configured: Boolean(vision),
     vision_image_count: rankedVisionUrls.length,
+    dom_token_count: domGatePick.tokens.length,
   });
 
   if (wantsVision) {
     if (!vision) {
-      throw new Error("Vision OCR requested but GOOGLE_VISION_CREDENTIALS_JSON is not configured");
-    }
+      pipelineWarnings.push(
+        "Pack-label OCR is not configured on the API. Set GOOGLE_VISION_CREDENTIALS_JSON in Railway to enable Vision.",
+      );
+      logPipelinePhase(log, logBase, "vision_skipped", 0, { reason: "not_configured" });
+    } else {
     const visionPhaseStart = nowMs();
     let t = nowMs();
     const buffers = await fetchImagesBounded(rankedVisionUrls);
@@ -479,6 +494,12 @@ export async function runLegacyAnalyzeProductPipeline(args: {
       ocr_char_total: ocrText.length,
       ocr_mean_confidence: ocrMeanConfidence,
     });
+    if (trimmedChunks.length === 0 && rankedVisionUrls.length > 0) {
+      pipelineWarnings.push(
+        "Product images could not be read (fetch or OCR returned empty). Try refreshing the product page.",
+      );
+    }
+    }
   }
 
   let tPick = nowMs();
@@ -643,9 +664,12 @@ export async function runLegacyAnalyzeProductPipeline(args: {
       tierCounts,
       totalIngredients: ingredientRows.length,
       warnings: finalCompleteness.completenessFlag
-        ? undefined
+        ? pipelineWarnings.length > 0
+          ? pipelineWarnings
+          : undefined
         : [
             "The ingredient list appears incomplete. Results may be inaccurate. Try another retailer, OCR, or refresh.",
+            ...pipelineWarnings,
           ],
     },
     ingredientRows,
