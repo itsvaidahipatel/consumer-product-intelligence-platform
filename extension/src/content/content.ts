@@ -23,20 +23,26 @@ function installMessageListener(): void {
       const type = (message as { type?: string }).type;
 
       if (type === "INGREDIENT_SCANNER_EXTRACT") {
-        const strategy = resolveStrategy(window.location.href);
-        if (!strategy) {
-          sendResponse({ ok: false, error: "This page is not a supported retailer yet." });
-          return;
-        }
-        try {
-          sendResponse({ ok: true, payload: strategy.extract() });
-        } catch (err) {
-          sendResponse({
-            ok: false,
-            error: err instanceof Error ? err.message : "extract_failed",
-          });
-        }
-        return;
+        void (async () => {
+          const strategy = resolveStrategy(window.location.href);
+          if (!strategy) {
+            sendResponse({ ok: false, error: "This page is not a supported retailer yet." });
+            return;
+          }
+          try {
+            if (strategy.siteId === "amazon_in") {
+              const { prepareAmazonIndiaPageForExtraction } = await import("./dom-utils.js");
+              await prepareAmazonIndiaPageForExtraction();
+            }
+            sendResponse({ ok: true, payload: strategy.extract() });
+          } catch (err) {
+            sendResponse({
+              ok: false,
+              error: err instanceof Error ? err.message : "extract_failed",
+            });
+          }
+        })();
+        return true;
       }
 
       if (type === "INGREDIENT_SCANNER_SHOW_BANNER") {

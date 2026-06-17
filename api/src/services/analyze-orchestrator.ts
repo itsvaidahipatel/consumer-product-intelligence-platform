@@ -375,6 +375,9 @@ export async function runAnalyzeProductPipeline(args: AnalyzePipelineArgs): Prom
       timestamp: timingSummary.completedAt,
       ingredient_count: response.totalIngredients,
       skipped_llm: rec.skippedLlm,
+      provenance: response.provenance,
+      winning_reason: response.winningReasonCode,
+      ingredient_chars: args.req.rawIngredientText.length,
     },
     "analyze_complete",
   );

@@ -95,6 +95,8 @@ async function handleAnalyzeProductPost(
       site_id: parsed.data.siteId,
       force_refresh: Boolean(parsed.data.forceRefresh),
       ingredient_chars: parsed.data.rawIngredientText.length,
+      image_url_count: parsed.data.imageUrls?.length ?? 0,
+      analysis_mode: parsed.data.analysisMode,
     },
     "analyze_start",
   );

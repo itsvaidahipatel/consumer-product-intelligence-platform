@@ -521,6 +521,12 @@ export async function runLegacyAnalyzeProductPipeline(args: {
       ? `${pick.winningRawText.trim()}\n${pick.tokens.join(", ")}`.trim()
       : pick.winningRawText.trim() || sanitizedDom.trim();
 
+  if (pick.tokens.length === 0) {
+    pipelineWarnings.push(
+      "No ingredients were found on the retailer page or in product images. Reload the tab, ensure Ingredients is visible on Amazon, and try Fresh Run.",
+    );
+  }
+
   let tFin = nowMs();
   const finalCompleteness = evaluateIngredientCompleteness(textForCompleteness, pick.tokens);
   logPipelinePhase(log, logBase, "final_completeness_eval", nowMs() - tFin, {

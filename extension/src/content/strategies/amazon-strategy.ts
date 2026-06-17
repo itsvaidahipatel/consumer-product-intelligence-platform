@@ -1,7 +1,6 @@
 import { BaseStrategy } from "./base-strategy.js";
 import {
   collectAmazonIndiaGalleryImages,
-  expandCollapsedSections,
   extractAmazonIndiaIngredients,
   pickFirstText,
 } from "../dom-utils.js";
@@ -16,12 +15,6 @@ export class AmazonInStrategy extends BaseStrategy {
 
   extract() {
     const cfg = SELECTORS[this.siteId];
-    expandCollapsedSections(document, [
-      "#importantInformation_feature_div",
-      "#productDetails_techSpec_section_1",
-      "#productDetails_detailBullets_sections1",
-      "#productOverview_feature_div",
-    ]);
     const url = window.location.href;
     const productName = pickFirstText(cfg.title);
     const gallery = collectAmazonIndiaGalleryImages(36);

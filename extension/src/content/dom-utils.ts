@@ -211,6 +211,51 @@ function scoreIngredientChunk(text: string): number {
   return score;
 }
 
+const AMAZON_PREP_SCOPES = [
+  "#importantInformation_feature_div",
+  "#productDetails_techSpec_section_1",
+  "#productDetails_detailBullets_sections1",
+  "#detailBullets_feature_div",
+  "#productOverview_feature_div",
+];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Expand lazy Amazon blocks, then wait for INCI text to appear in the DOM. */
+export async function prepareAmazonIndiaPageForExtraction(): Promise<void> {
+  expandCollapsedSections(document, AMAZON_PREP_SCOPES);
+  await sleep(300);
+  expandCollapsedSections(document, AMAZON_PREP_SCOPES);
+  await sleep(450);
+}
+
+function looksLikeRelaxedInci(text: string): boolean {
+  const commas = (text.match(/,/g) ?? []).length;
+  if (commas < 2 || text.length < 35) return false;
+  const tokens = text
+    .split(/,/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  if (tokens.length < 3) return false;
+  if (tokens.some((t) => /\b(?:benefits?|cleanses|hydrates|barrier|developed\s+with)\b/i.test(t))) {
+    return false;
+  }
+  if (tokens.some((t) => /\bceramides?\s+\d+\b/i.test(t) && !/\b(?:np|ap|eop)\b/i.test(t))) {
+    return false;
+  }
+  return true;
+}
+
+function finalizeInciBlob(raw: string, strict = true): string {
+  const cleaned = stripRetailerNoise(sanitizeDomIngredientBlob(raw));
+  if (!cleaned) return "";
+  if (strict && !looksLikeCommaInci(cleaned) && !looksLikeRelaxedInci(cleaned)) return "";
+  if (!strict && !looksLikeRelaxedInci(cleaned)) return "";
+  return cleaned;
+}
+
 function isExactIngredientsLabel(label: string): boolean {
   return /^ingredients?$/i.test(label.trim());
 }
@@ -243,10 +288,32 @@ function extractTextAfterHeading(root: ParentNode): string {
     let sibling: Element | null = h.nextElementSibling;
     for (let step = 0; step < 4 && sibling; step += 1) {
       const text = sibling.textContent?.replace(/\s+/g, " ").trim() ?? "";
-      if (text.length > 20 && looksLikeCommaInci(text)) {
+      if (text.length > 20 && (looksLikeCommaInci(text) || looksLikeRelaxedInci(text))) {
         return `Ingredients: ${text}`;
       }
       sibling = sibling.nextElementSibling;
+    }
+  }
+  return "";
+}
+
+function extractFromExpanderContent(): string {
+  const selectors = [
+    "#importantInformation_feature_div .a-expander-content",
+    "#importantInformation_feature_div .content",
+    "#detailBullets_feature_div",
+    "#productOverview_feature_div",
+  ];
+  for (const sel of selectors) {
+    const el = document.querySelector(sel);
+    const text = el?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    if (text.length < 30) continue;
+    const labeled = text.match(/\bingredients?\s*[:]\s*([^.]{35,1200})/i);
+    if (labeled?.[1] && (looksLikeCommaInci(labeled[1]) || looksLikeRelaxedInci(labeled[1]))) {
+      return `Ingredients: ${labeled[1].trim()}`;
+    }
+    if (looksLikeCommaInci(text) || looksLikeRelaxedInci(text)) {
+      return `Ingredients: ${text}`;
     }
   }
   return "";
@@ -261,7 +328,7 @@ function extractFromAmazonIngredientsBlock(): string {
   for (const sel of selectors) {
     const el = document.querySelector(sel);
     const text = el?.textContent?.replace(/\s+/g, " ").trim() ?? "";
-    if (text.length > 20 && looksLikeCommaInci(text)) {
+    if (text.length > 20 && (looksLikeCommaInci(text) || looksLikeRelaxedInci(text))) {
       return `Ingredients: ${text}`;
     }
   }
@@ -275,13 +342,15 @@ function extractCommaInciFromBody(): string {
   );
   if (!match?.[1]) return "";
   const candidate = match[1].replace(/\s+/g, " ").trim();
-  return looksLikeCommaInci(candidate) ? `Ingredients: ${candidate}` : "";
+  return looksLikeCommaInci(candidate) || looksLikeRelaxedInci(candidate)
+    ? `Ingredients: ${candidate}`
+    : "";
 }
 
 function extractFromDetailTable(): string {
   for (const row of Array.from(
     document.querySelectorAll(
-      "#productDetails_techSpec_section_1 tr, #productDetails_detailBullets_sections1 tr, table.prodDetTable tr",
+      "#productDetails_techSpec_section_1 tr, #productDetails_detailBullets_sections1 tr, #detailBullets_feature_div tr, table.prodDetTable tr, #productOverview_feature_div tr",
     ),
   )) {
     const th = row.querySelector("th");
@@ -298,26 +367,36 @@ function extractFromDetailTable(): string {
 /** Amazon.in: prefer Important Information / spec table over broad A+ marketing blocks. */
 export function extractAmazonIndiaIngredients(): string {
   const fromTable = extractFromDetailTable();
-  if (fromTable && looksLikeCommaInci(fromTable)) {
-    return stripRetailerNoise(sanitizeDomIngredientBlob(fromTable));
+  if (fromTable) {
+    const cleaned = finalizeInciBlob(fromTable);
+    if (cleaned) return cleaned;
+  }
+
+  const fromExpander = extractFromExpanderContent();
+  if (fromExpander) {
+    const cleaned = finalizeInciBlob(fromExpander);
+    if (cleaned) return cleaned;
   }
 
   const fromAmazonBlock = extractFromAmazonIngredientsBlock();
   if (fromAmazonBlock) {
-    return stripRetailerNoise(sanitizeDomIngredientBlob(fromAmazonBlock));
+    const cleaned = finalizeInciBlob(fromAmazonBlock);
+    if (cleaned) return cleaned;
   }
 
   const important = document.querySelector("#importantInformation_feature_div");
   if (important) {
     const fromHeading = extractTextAfterHeading(important);
     if (fromHeading) {
-      return stripRetailerNoise(sanitizeDomIngredientBlob(fromHeading));
+      const cleaned = finalizeInciBlob(fromHeading);
+      if (cleaned) return cleaned;
     }
   }
 
   const fromBody = extractCommaInciFromBody();
   if (fromBody) {
-    return stripRetailerNoise(sanitizeDomIngredientBlob(fromBody));
+    const cleaned = finalizeInciBlob(fromBody);
+    if (cleaned) return cleaned;
   }
 
   return findIngredientishText([
@@ -361,12 +440,14 @@ export function findIngredientishText(selectors: readonly string[]): string {
   }
 
   const best = chunks.sort((a, b) => scoreIngredientChunk(b) - scoreIngredientChunk(a))[0]!;
-  if (!looksLikeCommaInci(best)) {
-    const fromBody = extractCommaInciFromBody();
-    if (fromBody) {
-      return stripRetailerNoise(sanitizeDomIngredientBlob(fromBody));
-    }
-    return "";
+  const finalized = finalizeInciBlob(best);
+  if (finalized) return finalized;
+
+  const fromBody = extractCommaInciFromBody();
+  if (fromBody) {
+    const cleaned = finalizeInciBlob(fromBody);
+    if (cleaned) return cleaned;
   }
-  return stripRetailerNoise(sanitizeDomIngredientBlob(best));
+
+  return "";
 }
