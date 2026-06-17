@@ -190,6 +190,80 @@ export function collectGalleryImagesWithMeta(
 const INGREDIENTISH =
   /ingredient|inci|composition|contents?|formulation|formula|contains|made\s*with|declaration|nutrition\s*ingredients?/i;
 
+const JUNK_CHUNK =
+  /logshoppablemetrics|\.aplus-|padding-right\s*:|word-break\s*:|function\s+\w+\s*\(|customer\s+reviews/i;
+
+function scoreIngredientChunk(text: string): number {
+  let score = 0;
+  if (/\bingredients\s*[:\-\u2013]/i.test(text)) score += 60;
+  const commas = (text.match(/,/g) ?? []).length;
+  score += Math.min(commas * 4, 40);
+  if (JUNK_CHUNK.test(text)) score -= 120;
+  if (text.length > 1200 && commas < 4) score -= 40;
+  const inciHints = (text.match(/\b(?:aqua|water|glycerin|parfum|phenoxyethanol|ceramide|niacinamide|acid)\b/gi) ?? [])
+    .length;
+  score += inciHints * 6;
+  if (text.length > 40 && text.length < 900) score += 5;
+  return score;
+}
+
+function extractTextAfterHeading(root: ParentNode, headingRe: RegExp): string {
+  const headings = Array.from(root.querySelectorAll("h1, h2, h3, h4, h5, h6, span.a-text-bold, th"));
+  for (const h of headings) {
+    const label = h.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    if (!headingRe.test(label)) continue;
+    const sibling = h.nextElementSibling;
+    if (sibling?.textContent?.trim()) {
+      return `Ingredients: ${sibling.textContent.replace(/\s+/g, " ").trim()}`;
+    }
+    const parent = h.parentElement;
+    const p = parent?.querySelector("p, td, div.a-section");
+    if (p?.textContent?.trim() && p !== h) {
+      return `Ingredients: ${p.textContent.replace(/\s+/g, " ").trim()}`;
+    }
+  }
+  return "";
+}
+
+function extractFromDetailTable(): string {
+  for (const row of Array.from(
+    document.querySelectorAll(
+      "#productDetails_techSpec_section_1 tr, #productDetails_detailBullets_sections1 tr, table.prodDetTable tr",
+    ),
+  )) {
+    const th = row.querySelector("th");
+    const td = row.querySelector("td");
+    const label = th?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    const value = td?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+    if (/^ingredients?$/i.test(label) && value.length > 15) {
+      return `Ingredients: ${value}`;
+    }
+  }
+  return "";
+}
+
+/** Amazon.in: prefer Important Information / spec table over broad A+ marketing blocks. */
+export function extractAmazonIndiaIngredients(): string {
+  const fromTable = extractFromDetailTable();
+  if (fromTable) {
+    return stripRetailerNoise(sanitizeDomIngredientBlob(fromTable));
+  }
+
+  const important = document.querySelector("#importantInformation_feature_div");
+  if (important) {
+    const fromHeading = extractTextAfterHeading(important, /^ingredients?$/i);
+    if (fromHeading) {
+      return stripRetailerNoise(sanitizeDomIngredientBlob(fromHeading));
+    }
+  }
+
+  return findIngredientishText([
+    "#importantInformation_feature_div",
+    "#productDetails_techSpec_section_1",
+    "#productDetails_detailBullets_sections1",
+  ]);
+}
+
 export function findIngredientishText(selectors: readonly string[]): string {
   const chunks: string[] = [];
   for (const sel of selectors) {
@@ -209,16 +283,20 @@ export function findIngredientishText(selectors: readonly string[]): string {
       new RegExp(`ingredients?\\s*${punct}?\\s*([\\s\\S]{40,1200})`, "i"),
       new RegExp(`composition\\s*${punct}?\\s*([\\s\\S]{40,1200})`, "i"),
       new RegExp(`contents?\\s*${punct}?\\s*([\\s\\S]{40,1200})`, "i"),
-      new RegExp(`contains\\s*${punct}?\\s*([\\s\\S]{40,1200})`, "i"),
     ];
     for (const re of patterns) {
       const match = body.match(re);
       if (match?.[1]) {
-        chunks.push(match[1].trim());
+        chunks.push(`Ingredients: ${match[1].trim()}`);
         break;
       }
     }
   }
 
-  return stripRetailerNoise(sanitizeDomIngredientBlob(chunks.join(" \n ")));
+  if (chunks.length === 0) {
+    return "";
+  }
+
+  const best = chunks.sort((a, b) => scoreIngredientChunk(b) - scoreIngredientChunk(a))[0]!;
+  return stripRetailerNoise(sanitizeDomIngredientBlob(best));
 }

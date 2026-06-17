@@ -1,11 +1,12 @@
 {
   "name": "@ingredient-scanner/extension",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.content.config.ts",
     "dev": "vite build --watch",
+    "dev:content": "vite build --config vite.content.config.ts --watch",
     "test": "vitest run"
   },
   "dependencies": {
@@ -13,6 +14,7 @@
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",
+    "happy-dom": "^20.10.4",
     "typescript": "^5.7.2",
     "vite": "^6.0.6",
     "vitest": "^2.1.8"

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "AI Scanner",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "AI-powered product ingredient analysis on supported e-commerce sites.",
-  "permissions": ["activeTab", "scripting", "storage", "sidePanel", "tabs"],
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "host_permissions": [
     "http://localhost:8787/*",
     "https://*.up.railway.app/*",
@@ -12,6 +12,7 @@
     "https://www.nykaa.com/*",
     "https://www.myntra.com/*",
     "https://blinkit.com/*",
+    "https://www.blinkit.com/*",
     "https://www.zeptonow.com/*",
     "https://*.amazonaws.com/*",
     "https://*.cloudfront.net/*",
@@ -20,10 +21,8 @@
     "https://m.media-amazon.com/*"
   ],
   "action": {
-    "default_title": "AI Scanner"
-  },
-  "side_panel": {
-    "default_path": "sidepanel.html"
+    "default_title": "AI Scanner",
+    "default_popup": "popup.html"
   },
   "options_page": "options.html",
   "background": {
@@ -34,10 +33,11 @@
     {
       "matches": [
         "https://www.amazon.in/*",
-    "https://amazon.in/*",
+        "https://amazon.in/*",
         "https://www.nykaa.com/*",
         "https://www.myntra.com/*",
         "https://blinkit.com/*",
+    "https://www.blinkit.com/*",
         "https://www.zeptonow.com/*"
       ],
       "js": ["content.js"],

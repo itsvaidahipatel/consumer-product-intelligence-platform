@@ -13,11 +13,8 @@ export const SELECTORS = {
     ],
     ingredientSections: [
       "#importantInformation_feature_div",
-      "#productDetails_secondary_info_div",
-      "#aplus_feature_div .aplus-module table",
-      "#productDetails_feature_div",
-      "#feature-bullets ul",
-      "#productOverview_feature_div",
+      "#productDetails_techSpec_section_1",
+      "#productDetails_detailBullets_sections1",
     ],
   },
   nykaa: {

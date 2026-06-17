@@ -13,6 +13,10 @@ const PAGE_BLEED_MARKERS: RegExp[] = [
   /\bttaevents\b/i,
   /\bnexusschemaid\b/i,
   /\bobfuscatedmarketplaceid\b/i,
+  /\blogshoppablemetrics\b/i,
+  /\.aplus-v2\b/i,
+  /\bpadding-right\s*:/i,
+  /\bmodule-\d+\b/i,
 ];
 
 /** Start of non-INCI sections that commonly follow a cosmetic INCI list on Amazon.in. */
@@ -31,6 +35,14 @@ const POST_INCI_SECTION_MARKERS: RegExp[] = [
   /\bproduct\s+benefits\b/i,
   /\bspecial\s+feature\b/i,
   /\bage\s+range\s+description\b/i,
+  /\bkey\s+ingredients?\s*[:\u005C\u002D\u2013]/i,
+  /\bskin\s+type\b/i,
+  /\bfoaming\s+(?:texture|facial|gel)\b/i,
+  /\bdeveloped\s+with\s+dermatologists\b/i,
+  /\bproduct\s+description\b/i,
+  /\bcustomer\s+reviews\b/i,
+  /\bprice\b/i,
+  /\bno\s+data\b/i,
 ];
 
 function hardChopBleed(s: string): string {
@@ -44,7 +56,8 @@ function hardChopBleed(s: string): string {
 
 function lastIngredientsLabelEnd(text: string): number {
   let end = -1;
-  const re = /\bingredients\s*[:\u005C\u002D\u2013]\s*/gi;
+  // Standalone INCI label — skip marketing phrases like "key ingredients" / "active ingredients".
+  const re = /(?<!(?:key|active)\s)\bingredients\s*[:\u005C\u002D\u2013]\s*/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     end = m.index + m[0].length;
@@ -75,6 +88,10 @@ function isGarbageDomLine(line: string): boolean {
   }
   if (/^\s*typeof\s+window/.test(s)) return true;
   if (/^\s*ent:\s*['"]all['"]\s*$/.test(s)) return true;
+  if (/\blogshoppablemetrics\b|\.aplus-|padding-right\s*:|word-break\s*:/.test(s)) return true;
+  if (/\b(?:cleanses|hydrates|moisturising|non-comedogenic|fragrance-free)\b/.test(s) && !/,/.test(s)) {
+    return true;
+  }
   return false;
 }
 

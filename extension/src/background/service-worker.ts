@@ -1,6 +1,8 @@
 import type { AnalyzeProductRequest, AnalyzeProductResponse } from "@ingredient-scanner/shared";
-import { ANALYSIS_JOB_KEY, type AnalysisJobState } from "../panel/analysis-job-storage.js";
+import { ANALYSIS_JOB_KEY, RESULTS_VISIBLE_KEY, type AnalysisJobState } from "../panel/analysis-job-storage.js";
 import { DEFAULT_API_BASE_URL, LEGACY_LOCAL_API_URL } from "../config.js";
+import { extractFromTab } from "./extract-tab.js";
+import { deliverToTab } from "./deliver-to-tab.js";
 
 const ANALYZE_TIMEOUT_MS = 120_000;
 
@@ -24,18 +26,30 @@ type AnalyzeMessage = {
   apiBaseUrl: string;
   apiKey: string;
   tabId: number;
+  runId: string;
 };
 
+async function markResultsVisible(tabId: number, runId: string): Promise<void> {
+  await chrome.storage.local.set({
+    [RESULTS_VISIBLE_KEY]: { tabId, at: Date.now(), runId },
+  });
+}
+
+async function notifyTabError(tabId: number, message: string, runId?: string): Promise<void> {
+  await deliverToTab(tabId, {
+    type: "INGREDIENT_SCANNER_SHOW_ERROR",
+    message,
+    runId: runId ?? "error",
+  });
+}
+
 chrome.runtime.onInstalled.addListener(() => {
-  void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   void chrome.storage.sync.get("apiBaseUrl").then(({ apiBaseUrl }) => {
     if (!apiBaseUrl || apiBaseUrl === LEGACY_LOCAL_API_URL) {
       return chrome.storage.sync.set({ apiBaseUrl: DEFAULT_API_BASE_URL });
     }
   });
 });
-
-void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
 void chrome.storage.sync.get("apiBaseUrl").then(({ apiBaseUrl }) => {
   if (!apiBaseUrl || apiBaseUrl === LEGACY_LOCAL_API_URL) {
@@ -46,6 +60,7 @@ void chrome.storage.sync.get("apiBaseUrl").then(({ apiBaseUrl }) => {
 async function runAnalyzeJob(msg: AnalyzeMessage): Promise<void> {
   const jobT0 = performance.now();
   const tabId = msg.tabId;
+  const runId = msg.runId;
   swLog("job_started", performance.now() - jobT0, {
     tab_id: tabId,
     api_host: (() => {
@@ -60,9 +75,13 @@ async function runAnalyzeJob(msg: AnalyzeMessage): Promise<void> {
   });
 
   await chrome.storage.local.set({
-    [ANALYSIS_JOB_KEY]: { phase: "running", startedAt: Date.now(), tabId } satisfies AnalysisJobState,
+    [ANALYSIS_JOB_KEY]: {
+      phase: "running",
+      startedAt: Date.now(),
+      tabId,
+      runId,
+    } satisfies AnalysisJobState,
   });
-  swLog("storage_set_running", performance.now() - jobT0, { tab_id: tabId });
 
   try {
     const headers: Record<string, string> = {
@@ -74,12 +93,6 @@ async function runAnalyzeJob(msg: AnalyzeMessage): Promise<void> {
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ANALYZE_TIMEOUT_MS);
-
-    const bodyBytes = new TextEncoder().encode(JSON.stringify(msg.payload)).length;
-    swLog("fetch_analyze_product_start", performance.now() - jobT0, {
-      body_bytes: bodyBytes,
-      timeout_ms: ANALYZE_TIMEOUT_MS,
-    });
 
     const fetchT0 = performance.now();
     const res = await fetch(`${msg.apiBaseUrl}/analyze/product`, {
@@ -98,10 +111,6 @@ async function runAnalyzeJob(msg: AnalyzeMessage): Promise<void> {
 
     if (!res.ok) {
       const text = await res.text();
-      swLog("http_error_body_read", performance.now() - jobT0, {
-        status: res.status,
-        body_preview_chars: text.length,
-      });
       let message = `HTTP ${res.status}: `;
       try {
         const j = JSON.parse(text) as {
@@ -123,50 +132,60 @@ async function runAnalyzeJob(msg: AnalyzeMessage): Promise<void> {
       } catch {
         message += text;
       }
+      const trimmed = message.slice(0, 4000);
       await chrome.storage.local.set({
         [ANALYSIS_JOB_KEY]: {
           phase: "error",
           tabId,
-          message: message.slice(0, 4000),
+          message: trimmed,
           finishedAt: Date.now(),
+          runId,
         } satisfies AnalysisJobState,
       });
-      swLog("job_finished_error", performance.now() - jobT0, { reason: "http_not_ok" });
+      await notifyTabError(tabId, trimmed, runId);
       return;
     }
 
-    const parseT0 = performance.now();
     const data = (await res.json()) as AnalyzeProductResponse;
     swLog("response_json_parsed", performance.now() - jobT0, {
-      parse_duration_ms: Math.round(performance.now() - parseT0),
       correlation_id: data.correlationId,
       result_source: data.resultSource,
       total_ingredients: data.totalIngredients,
     });
 
-    await chrome.storage.local.set({
-      [ANALYSIS_JOB_KEY]: {
-        phase: "done",
-        tabId,
-        data,
-        finishedAt: Date.now(),
-      } satisfies AnalysisJobState,
-    });
-    swLog("storage_set_done", performance.now() - jobT0, {
-      correlation_id: data.correlationId,
+    const resultsShown = await deliverToTab(tabId, {
+      type: "INGREDIENT_SCANNER_SHOW_BANNER",
+      payload: data,
+      runId,
     });
 
-    try {
-      await chrome.tabs.sendMessage(tabId, {
-        type: "INGREDIENT_SCANNER_SHOW_BANNER",
-        payload: data,
+    if (resultsShown) {
+      await markResultsVisible(tabId, runId);
+    }
+
+    if (resultsShown) {
+      await chrome.storage.local.set({
+        [ANALYSIS_JOB_KEY]: {
+          phase: "done",
+          tabId,
+          data,
+          finishedAt: Date.now(),
+          runId,
+        } satisfies AnalysisJobState,
       });
-      swLog("content_banner_message_sent", performance.now() - jobT0, { tab_id: tabId });
-    } catch (bannerErr) {
-      swLog("content_banner_message_skipped", performance.now() - jobT0, {
-        tab_id: tabId,
-        error: bannerErr instanceof Error ? bannerErr.message : String(bannerErr),
+    } else {
+      const displayErr =
+        "Analysis finished but could not show results on this page. Reload the tab and try again.";
+      await chrome.storage.local.set({
+        [ANALYSIS_JOB_KEY]: {
+          phase: "error",
+          tabId,
+          message: displayErr,
+          finishedAt: Date.now(),
+          runId,
+        } satisfies AnalysisJobState,
       });
+      await notifyTabError(tabId, displayErr, runId);
     }
 
     swLog("job_finished_ok", performance.now() - jobT0, {
@@ -180,53 +199,132 @@ async function runAnalyzeJob(msg: AnalyzeMessage): Promise<void> {
           ? `Request timed out after ${ANALYZE_TIMEOUT_MS / 1000}s`
           : err.message
         : "network_error";
-    swLog("job_catch", performance.now() - jobT0, {
-      error_name: err instanceof Error ? err.name : "unknown",
-      message,
-    });
     await chrome.storage.local.set({
       [ANALYSIS_JOB_KEY]: {
         phase: "error",
         tabId,
         message,
         finishedAt: Date.now(),
+        runId,
       } satisfies AnalysisJobState,
     });
-    swLog("job_finished_error", performance.now() - jobT0, { reason: "exception_or_abort" });
+    await notifyTabError(tabId, message, runId);
   }
 }
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-  if (!message || typeof message !== "object") return false;
-  const msg = message as { type?: string; tabId?: number };
-
-  if (msg.type === "AI_SCANNER_OPEN_AND_ANALYZE") {
-    void (async () => {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tab?.windowId != null) {
-        await chrome.sidePanel.open({ windowId: tab.windowId });
-      }
-      sendResponse({ ok: true, opened: true });
-    })();
-    return true;
-  }
-
-  if (msg.type !== "INGREDIENT_SCANNER_ANALYZE") return false;
-
-  if (typeof msg.tabId !== "number") {
-    sendResponse({ ok: false, error: "missing_tabId" });
-    return false;
-  }
-
+function enqueueAnalyze(msg: AnalyzeMessage, sendResponse: (r: unknown) => void): boolean {
   if (inFlightByTab.has(msg.tabId)) {
     sendResponse({ ok: false, error: "analysis_already_running" });
     return false;
   }
 
-  const job = runAnalyzeJob(msg as AnalyzeMessage).finally(() => {
-    inFlightByTab.delete(msg.tabId!);
+  const job = runAnalyzeJob(msg).finally(() => {
+    inFlightByTab.delete(msg.tabId);
   });
   inFlightByTab.set(msg.tabId, job);
   sendResponse({ ok: true, accepted: true as const });
+  return false;
+}
+
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+  if (!message || typeof message !== "object") return false;
+  const msg = message as {
+    type?: string;
+    tabId?: number;
+    runId?: string;
+    payload?: AnalyzeProductRequest;
+    forceRefresh?: boolean;
+    apiBaseUrl?: string;
+    apiKey?: string;
+  };
+
+  if (msg.type === "INGREDIENT_SCANNER_ANALYZE") {
+    if (typeof msg.tabId !== "number" || !msg.runId) {
+      sendResponse({ ok: false, error: "missing_tabId_or_runId" });
+      return false;
+    }
+    return enqueueAnalyze(msg as AnalyzeMessage, sendResponse);
+  }
+
+  if (msg.type === "INGREDIENT_SCANNER_ANALYZE_WITH_PAYLOAD") {
+    void (async () => {
+      const tabId = sender.tab?.id;
+      if (tabId == null) {
+        sendResponse({ ok: false, error: "missing_tabId" });
+        return;
+      }
+
+      const settings = await chrome.storage.sync.get([
+        "apiBaseUrl",
+        "apiKey",
+        "enableAnalysis",
+        "enableQuickie",
+        "analysisMode",
+        "forceRefresh",
+        "userPreferences",
+      ]);
+
+      const enableAnalysis =
+        typeof settings.enableAnalysis === "boolean"
+          ? settings.enableAnalysis
+          : settings.enableQuickie !== false;
+
+      if (!enableAnalysis) {
+        sendResponse({ ok: false, error: "Ingredient analysis is disabled in Options." });
+        return;
+      }
+
+      const useForceRefresh = msg.forceRefresh ? true : Boolean(settings.forceRefresh);
+      if (settings.forceRefresh && !msg.forceRefresh) {
+        void chrome.storage.sync.set({ forceRefresh: false });
+      }
+
+      const apiBaseUrl = String(settings.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
+      const maxImages = Number(settings.maxGalleryImages ?? 12);
+
+      const runId = `${Date.now()}-page`;
+
+      enqueueAnalyze(
+        {
+          type: "INGREDIENT_SCANNER_ANALYZE",
+          tabId,
+          runId,
+          payload: {
+            ...msg.payload!,
+            analysisMode: settings.analysisMode === "DOM_ONLY" ? "DOM_ONLY" : "DOM_AND_VISION",
+            forceRefresh: useForceRefresh,
+            imageUrls: (msg.payload?.imageUrls ?? []).slice(0, maxImages),
+            userPreferences: settings.userPreferences as Record<string, boolean> | undefined,
+          },
+          apiBaseUrl,
+          apiKey: settings.apiKey ? String(settings.apiKey) : "",
+        },
+        sendResponse,
+      );
+    })();
+    return true;
+  }
+
+  if (msg.type === "INGREDIENT_SCANNER_EXTRACT_TAB") {
+    void (async () => {
+      if (typeof msg.tabId !== "number") {
+        sendResponse({ ok: false, error: "missing_tabId" });
+        return;
+      }
+      sendResponse(await extractFromTab(msg.tabId));
+    })();
+    return true;
+  }
+
+  if (msg.type === "INGREDIENT_SCANNER_UI_VISIBLE") {
+    const tabId = sender.tab?.id;
+    const runId = msg.runId;
+    if (tabId != null && runId) {
+      void markResultsVisible(tabId, runId);
+    }
+    sendResponse({ ok: true });
+    return false;
+  }
+
   return false;
 });

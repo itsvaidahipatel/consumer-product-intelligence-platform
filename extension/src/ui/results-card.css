@@ -1,0 +1,126 @@
+.card-host {
+  all: initial;
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483646;
+  max-width: min(400px, calc(100vw - 32px));
+  font-family: var(--font);
+}
+
+.results-card {
+  background: var(--surface-gradient);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  max-height: min(78vh, 640px);
+  display: flex;
+  flex-direction: column;
+}
+
+.results-card__header {
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.results-card__header-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.results-card__brand {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.results-card__title {
+  margin: 8px 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.results-card__subtitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.results-card__body {
+  padding: 14px 16px 16px;
+  overflow: auto;
+  flex: 1;
+}
+
+.results-card__section {
+  margin-bottom: 18px;
+}
+
+.results-card__section:last-child {
+  margin-bottom: 0;
+}
+
+.results-card__section-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.warning-banner {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: #fdf8ec;
+  border: 1px solid #ecd89a;
+  color: #7a6020;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.results-card__footer {
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: rgba(250, 246, 240, 0.6);
+}
+
+.insight-text {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  border: 1px solid #e4d8ee;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.personalized-note {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: #fdf3f0;
+  border: 1px solid #f0d4cc;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #8a4a3a;
+}
+
+.error-card .results-card__title {
+  color: #9a3d30;
+}

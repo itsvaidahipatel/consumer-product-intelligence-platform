@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Scanner</title>
+    <link rel="stylesheet" href="/src/ui/tokens.css" />
+    <link rel="stylesheet" href="/src/ui/components.css" />
+    <link rel="stylesheet" href="/src/popup/popup.css" />
+  </head>
+  <body>
+    <main class="popup" aria-label="AI Scanner">
+      <h1 class="popup__product" id="productTitle">Loading product…</h1>
+      <div id="status" class="popup__status" hidden></div>
+      <div class="popup__actions">
+        <button id="analyze" type="button" class="btn btn--primary">Analyze</button>
+        <button id="analyze-fresh" type="button" class="btn btn--secondary">Fresh Run</button>
+      </div>
+      <footer class="popup__footer">
+        <a id="privacyLink" href="#" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+      </footer>
+    </main>
+    <script type="module" src="/src/popup/popup.ts"></script>
+  </body>
+</html>

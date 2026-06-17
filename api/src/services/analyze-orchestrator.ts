@@ -262,15 +262,18 @@ export async function runAnalyzeProductPipeline(args: AnalyzePipelineArgs): Prom
       metadata: { wall_ms: timingSummary.totalMs, cache_fast_path: true },
     });
 
-    args.log.info({
-      ...omitInternalLogFields(logBase),
-      event: "analyze_complete",
-      result_source: "cache",
-      cache_fast_path: true,
-      total_ms: timingSummary.totalMs,
-      timestamp: timingSummary.completedAt,
-      ingredient_count: response.totalIngredients,
-    });
+    args.log.info(
+      {
+        ...omitInternalLogFields(logBase),
+        event: "analyze_complete",
+        result_source: "cache",
+        cache_fast_path: true,
+        total_ms: timingSummary.totalMs,
+        timestamp: timingSummary.completedAt,
+        ingredient_count: response.totalIngredients,
+      },
+      "analyze_complete",
+    );
 
     return response;
   }
@@ -295,6 +298,7 @@ export async function runAnalyzeProductPipeline(args: AnalyzePipelineArgs): Prom
     args.log.warn({
       ...omitInternalLogFields(logBase),
       event: "fact_check_failed",
+      msg: "fact_check_failed",
       issues: check.issues,
       timestamp: new Date().toISOString(),
     });
@@ -359,15 +363,18 @@ export async function runAnalyzeProductPipeline(args: AnalyzePipelineArgs): Prom
     metadata: { wall_ms: timingSummary.totalMs, phases: timingSummary.phases.length },
   });
 
-  args.log.info({
-    ...omitInternalLogFields(logBase),
-    event: "analyze_complete",
-    result_source: response.resultSource,
-    total_ms: timingSummary.totalMs,
-    timestamp: timingSummary.completedAt,
-    ingredient_count: response.totalIngredients,
-    skipped_llm: rec.skippedLlm,
-  });
+  args.log.info(
+    {
+      ...omitInternalLogFields(logBase),
+      event: "analyze_complete",
+      result_source: response.resultSource,
+      total_ms: timingSummary.totalMs,
+      timestamp: timingSummary.completedAt,
+      ingredient_count: response.totalIngredients,
+      skipped_llm: rec.skippedLlm,
+    },
+    "analyze_complete",
+  );
 
   return response;
 }
